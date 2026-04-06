@@ -75,6 +75,14 @@ export interface ReviewTaskItem {
   scenario: "tender_compliance" | "bid_consistency";
   name: string;
   status: string;
+  stageLabel: string;
+  formalReportHtml: string | null;
+  chapterSummaries: Array<{
+    title: string;
+    summary: string;
+    issueCount: number;
+    pageRange: string;
+  }>;
   progress: number;
   riskLevel: "高" | "中" | "低";
   documentIds: string[];
@@ -113,6 +121,7 @@ export interface FindingListItem {
   regulationChunkIds: string[];
   needsHumanReview: boolean;
   confidence: number;
+  reviewStage: "chapter_review" | "cross_section_review" | "response_consistency_review";
   sourceChunks: Array<{
     documentId: string;
     documentName: string;

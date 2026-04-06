@@ -200,12 +200,13 @@ const ProjectDetail = () => {
             {tasks.map((task) => (
               <div key={task.id} className="rounded-lg border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{task.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {task.scenario === "tender_compliance" ? "招标审查" : "投标审查"} · {task.createdAt.slice(0, 10)}
-                    </p>
-                  </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{task.name}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {task.scenario === "tender_compliance" ? "招标审查" : "投标审查"} · {task.createdAt.slice(0, 10)}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">当前阶段：{task.stageLabel}</p>
+                          </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">{task.status}</Badge>
                     <Badge variant={riskBadge(task.riskLevel)}>{task.riskLevel}风险</Badge>

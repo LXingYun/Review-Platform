@@ -73,6 +73,14 @@ export interface ReviewTask {
   scenario: ReviewScenario;
   name: string;
   status: ReviewTaskStatus;
+  stageLabel: string;
+  formalReportHtml: string | null;
+  chapterSummaries: Array<{
+    title: string;
+    summary: string;
+    issueCount: number;
+    pageRange: string;
+  }>;
   progress: number;
   riskLevel: RiskLevel;
   documentIds: string[];
@@ -97,6 +105,7 @@ export interface Finding {
   regulationChunkIds: string[];
   needsHumanReview: boolean;
   confidence: number;
+  reviewStage: "chapter_review" | "cross_section_review" | "response_consistency_review";
   scenario: ReviewScenario;
   createdAt: string;
 }

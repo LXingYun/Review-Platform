@@ -182,6 +182,7 @@ export const generateScenarioFindings = (
         regulationChunkIds,
         needsHumanReview: true,
         confidence: 0.58,
+        reviewStage: "chapter_review",
         scenario,
         createdAt,
       });
@@ -218,6 +219,7 @@ export const generateScenarioFindings = (
         regulationChunkIds,
         needsHumanReview: true,
         confidence: 0.62,
+        reviewStage: "chapter_review",
         scenario,
         createdAt,
       });
@@ -254,6 +256,7 @@ export const generateScenarioFindings = (
         regulationChunkIds,
         needsHumanReview: true,
         confidence: 0.6,
+        reviewStage: "chapter_review",
         scenario,
         createdAt,
       });
@@ -296,6 +299,7 @@ export const generateScenarioFindings = (
         regulationChunkIds: [],
         needsHumanReview: true,
         confidence: 0.56,
+        reviewStage: "response_consistency_review",
         scenario,
         createdAt,
       });
@@ -328,6 +332,7 @@ export const generateScenarioFindings = (
         regulationChunkIds: [],
         needsHumanReview: true,
         confidence: 0.59,
+        reviewStage: "response_consistency_review",
         scenario,
         createdAt,
       });
@@ -360,6 +365,7 @@ export const generateScenarioFindings = (
         regulationChunkIds: [],
         needsHumanReview: true,
         confidence: 0.63,
+        reviewStage: "response_consistency_review",
         scenario,
         createdAt,
       });
@@ -390,6 +396,7 @@ export const generateScenarioFindings = (
       regulationChunkIds: [],
       needsHumanReview: true,
       confidence: 0.35,
+      reviewStage: scenario === "bid_consistency" ? "response_consistency_review" : "chapter_review",
       scenario,
       createdAt,
     },

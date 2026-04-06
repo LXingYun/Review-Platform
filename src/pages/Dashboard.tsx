@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -33,6 +34,7 @@ const statusColor = (status: string) => {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiRequest<DashboardResponse>("/dashboard"),
@@ -91,7 +93,10 @@ const Dashboard = () => {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">最近审查任务</CardTitle>
-            <button className="text-sm text-primary flex items-center gap-1 hover:underline">
+            <button
+              className="text-sm text-primary flex items-center gap-1 hover:underline"
+              onClick={() => navigate("/projects")}
+            >
               查看全部 <ArrowUpRight className="h-3 w-3" />
             </button>
           </div>

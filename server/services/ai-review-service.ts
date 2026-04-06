@@ -298,6 +298,7 @@ export const generateAiScenarioFindings = async (params: {
     regulationChunkIds: finding.regulationChunkIds,
     needsHumanReview: finding.needsHumanReview,
     confidence: finding.confidence,
+    reviewStage: params.scenario === "bid_consistency" ? "response_consistency_review" : "chapter_review",
     scenario: params.scenario,
     createdAt: nowIso(),
   }));

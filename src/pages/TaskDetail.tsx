@@ -5,6 +5,7 @@ import { ArrowLeft, FileSearch, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { apiRequest } from "@/lib/api";
+import { API_BASE_URL, apiRequest } from "@/lib/api";
 import { DocumentItem, FindingListItem, ReviewTaskDetailItem } from "@/lib/api-types";
 
 const riskBadge = (risk: string) => {
@@ -67,6 +68,11 @@ const TaskDetail = () => {
     if (!task) return [];
     return documents.filter((document) => task.documentIds.includes(document.id));
   }, [documents, task]);
+
+  const crossSectionFindings = useMemo(
+    () => findings.filter((finding) => finding.reviewStage === "cross_section_review"),
+    [findings],
+  );
 
   const deleteTaskMutation = useMutation({
     mutationFn: () =>
@@ -130,9 +136,16 @@ const TaskDetail = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button onClick={() => navigate(`/results?projectId=${encodeURIComponent(task.projectId)}&scenario=${task.scenario}`)}>
+          <Button onClick={() => navigate(`/results?projectId=${encodeURIComponent(task.projectId)}&scenario=${task.scenario}&taskId=${task.id}`)}>
             <FileSearch className="h-4 w-4 mr-2" />
             查看结果页
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => window.open(`${API_BASE_URL}/review-tasks/${task.id}/formal-report`, "_blank", "noopener,noreferrer")}
+            disabled={!task.formalReportHtml}
+          >
+            查看报告
           </Button>
         </div>
       </div>
@@ -147,9 +160,13 @@ const TaskDetail = () => {
             </div>
             <div className="text-sm text-muted-foreground space-y-1">
               <p>任务状态：{task.status}</p>
+              <p>当前阶段：{task.stageLabel}</p>
               <p>创建时间：{task.createdAt.slice(0, 10)}</p>
               <p>完成时间：{task.completedAt ? task.completedAt.slice(0, 10) : "未完成"}</p>
               <p>进度：{task.progress}%</p>
+            </div>
+            <div className="pt-2">
+              <Progress value={task.progress} className="h-2" />
             </div>
           </CardContent>
         </Card>
@@ -171,7 +188,7 @@ const TaskDetail = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="space-y-6">
         <Card className="border border-border shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">关联文件</CardTitle>
@@ -220,6 +237,56 @@ const TaskDetail = () => {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border border-border shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">章节审查摘要</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {task.chapterSummaries.length === 0 && <p className="text-sm text-muted-foreground">当前任务暂无章节摘要。</p>}
+          {task.chapterSummaries.length > 0 && (
+            <div className="rounded-lg bg-muted p-3">
+              <p className="text-xs text-muted-foreground">识别出的章节清单</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {task.chapterSummaries.map((chapter) => (
+                  <Badge key={`chapter-list-${chapter.title}`} variant="outline">
+                    {chapter.title} · {chapter.pageRange}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+          {task.chapterSummaries.map((chapter) => (
+            <div key={chapter.title} className="rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-foreground">{chapter.title}</p>
+                <Badge variant="outline">{chapter.issueCount} 个问题</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{chapter.pageRange}</p>
+              <p className="text-sm text-muted-foreground mt-2">{chapter.summary || "暂无章节摘要"}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">跨章节冲突摘要</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {crossSectionFindings.length === 0 && <p className="text-sm text-muted-foreground">当前任务暂无跨章节冲突。</p>}
+          {crossSectionFindings.map((finding) => (
+            <div key={finding.id} className="rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-foreground">{finding.title}</p>
+                <Badge variant={riskBadge(finding.risk)}>{finding.risk}风险</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{finding.location}</p>
+              <p className="text-sm text-muted-foreground mt-2">{finding.description}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 };

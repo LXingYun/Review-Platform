@@ -1,5 +1,7 @@
 import { store } from "../store";
 import { FindingStatus, ReviewScenario } from "../types";
+import { getAiConfig } from "./ai-config-service";
+import { generateFinalReviewReport } from "./final-report-service";
 
 const mapDocumentChunkById = () => {
   const data = store.get();
@@ -359,6 +361,137 @@ export const exportFindingsHtmlReport = (params?: {
       </main>
     </body>
   </html>`;
+};
+
+export const exportFindingsFormalHtmlReport = async (params?: {
+  search?: string;
+  status?: FindingStatus;
+  projectId?: string;
+  scenario?: ReviewScenario;
+}) => {
+  const findings = listFindings(params);
+  const generatedAt = new Date().toLocaleString("zh-CN");
+  const projectLabel = params?.projectId ? findings[0]?.project ?? params.projectId : "全部项目";
+  const scenarioLabel =
+    params?.scenario === "tender_compliance"
+      ? "招标审查"
+      : params?.scenario === "bid_consistency"
+        ? "投标审查"
+        : "全部场景";
+
+  const aiConfig = getAiConfig();
+  const finalReport = aiConfig.enabled
+    ? await generateFinalReviewReport({
+        projectLabel,
+        scenarioLabel,
+        findings: findings.map((finding) => ({
+          title: finding.title,
+          category: finding.category,
+          risk: finding.risk,
+          description: finding.description,
+          recommendation: finding.recommendation,
+          location: finding.location,
+          reviewStage: finding.reviewStage,
+        })),
+      }).catch(() => null)
+    : null;
+
+  const keyRisks = finalReport?.keyRisks ?? [];
+  const recommendations = finalReport?.recommendations ?? [];
+  const chapterFindings = findings.filter((finding) => finding.reviewStage === "chapter_review");
+  const crossSectionFindings = findings.filter((finding) => finding.reviewStage === "cross_section_review");
+
+  return `<!DOCTYPE html>
+  <html lang="zh-CN">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>${finalReport?.title ?? "正式审查报告"}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 32px; color: #111827; background: #f8fafc; }
+        .report { max-width: 960px; margin: 0 auto; }
+        .card { background: white; border: 1px solid #e5e7eb; border-radius: 16px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); margin-bottom: 20px; }
+        h1,h2,h3 { margin: 0 0 12px; }
+        p,li { line-height: 1.7; white-space: pre-wrap; }
+        ul { margin: 0; padding-left: 20px; }
+      </style>
+    </head>
+    <body>
+      <main class="report">
+        <section class="card">
+          <h1>${escapeHtml(finalReport?.title ?? "正式审查报告")}</h1>
+          <p>生成时间：${escapeHtml(generatedAt)}</p>
+          <p>项目范围：${escapeHtml(projectLabel)}</p>
+          <p>审查场景：${escapeHtml(scenarioLabel)}</p>
+          <p>问题总数：${findings.length}</p>
+        </section>
+        <section class="card">
+          <h2>执行摘要</h2>
+          <p>${escapeHtml(finalReport?.executiveSummary ?? "当前报告基于结构化审查结果自动生成，请结合问题明细继续人工复核。")}</p>
+        </section>
+        ${keyRisks.length > 0 ? `<section class="card"><h2>关键风险</h2><ul>${keyRisks.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : ""}
+        ${recommendations.length > 0 ? `<section class="card"><h2>总体建议</h2><ul>${recommendations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : ""}
+        <section class="card">
+          <h2>结论</h2>
+          <p>${escapeHtml(finalReport?.conclusion ?? "请根据问题明细逐项处理，并保留人工复核记录。")}</p>
+        </section>
+        <section class="card">
+          <h2>章节审查问题</h2>
+          ${chapterFindings.length === 0 ? "<p>未发现章节级问题。</p>" : `<ul>${chapterFindings
+            .map(
+              (finding) => `<li>${escapeHtml(`[${finding.risk}] ${finding.title} - ${finding.location}`)}</li>`,
+            )
+            .join("")}</ul>`}
+        </section>
+        <section class="card">
+          <h2>跨章节冲突</h2>
+          ${crossSectionFindings.length === 0 ? "<p>未发现跨章节冲突。</p>" : `<ul>${crossSectionFindings
+            .map(
+              (finding) => `<li>${escapeHtml(`[${finding.risk}] ${finding.title} - ${finding.location}`)}</li>`,
+            )
+            .join("")}</ul>`}
+        </section>
+      </main>
+    </body>
+  </html>`;
+};
+
+export const generateTaskFormalReport = async (taskId: string) => {
+  const data = store.get();
+  const task = data.reviewTasks.find((item) => item.id === taskId);
+
+  if (!task) {
+    throw new Error("审查任务不存在");
+  }
+
+  const html = await exportFindingsFormalHtmlReport({
+    projectId: task.projectId,
+    scenario: task.scenario,
+  });
+
+  store.update((current) => ({
+    ...current,
+    reviewTasks: current.reviewTasks.map((item) =>
+      item.id === taskId ? { ...item, formalReportHtml: html } : item,
+    ),
+  }));
+
+  return html;
+};
+
+export const getTaskFormalReport = (taskId: string) => {
+  const data = store.get();
+  const task = data.reviewTasks.find((item) => item.id === taskId);
+
+  if (!task) {
+    throw new Error("审查任务不存在");
+  }
+
+  if (!task.formalReportHtml) {
+    throw new Error("该任务尚未生成正式报告");
+  }
+
+  return task.formalReportHtml;
 };
 
 export const updateFindingStatus = (findingId: string, status: FindingStatus) => {

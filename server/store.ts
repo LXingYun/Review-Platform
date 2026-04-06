@@ -48,6 +48,16 @@ const readData = (): AppData => {
     regulationChunkIds: finding.regulationChunkIds ?? [],
     needsHumanReview: finding.needsHumanReview ?? true,
     confidence: finding.confidence ?? 0.5,
+    reviewStage: finding.reviewStage ?? "chapter_review",
+  }));
+
+  parsed.reviewTasks = parsed.reviewTasks.map((task) => ({
+    ...task,
+    formalReportHtml: task.formalReportHtml ?? null,
+    chapterSummaries: (task.chapterSummaries ?? []).map((chapter) => ({
+      ...chapter,
+      pageRange: chapter.pageRange ?? "页码未知",
+    })),
   }));
 
   return parsed;

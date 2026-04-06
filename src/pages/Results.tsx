@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { API_BASE_URL, apiRequest } from "@/lib/api";
 import { FindingListItem } from "@/lib/api-types";
+import { useToast } from "@/hooks/use-toast";
 
 const riskIcon = (risk: string) => {
   if (risk === "高") return <XCircle className="h-4 w-4 text-destructive" />;
@@ -24,6 +25,12 @@ const riskBadge = (risk: string) => {
   if (risk === "高") return "destructive" as const;
   if (risk === "中") return "secondary" as const;
   return "outline" as const;
+};
+
+const reviewStageLabel = (stage: FindingListItem["reviewStage"]) => {
+  if (stage === "cross_section_review") return "跨章节冲突";
+  if (stage === "response_consistency_review") return "响应一致性";
+  return "章节审查";
 };
 
 const ChunkGroup = ({
@@ -52,6 +59,7 @@ const ChunkGroup = ({
 
 const Results = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [selectedIssue, setSelectedIssue] = useState<FindingListItem | null>(null);
@@ -60,6 +68,7 @@ const Results = () => {
 
   const projectId = searchParams.get("projectId") ?? "";
   const scenario = searchParams.get("scenario") ?? "";
+  const taskId = searchParams.get("taskId") ?? "";
 
   const findingsQuery = useMemo(() => {
     const params = new URLSearchParams();
@@ -94,8 +103,19 @@ const Results = () => {
         body: JSON.stringify({ status }),
       }),
     onSuccess: (finding) => {
-      setSelectedIssue(finding);
+      setSelectedIssue(null);
       queryClient.invalidateQueries({ queryKey: ["findings"] });
+      toast({
+        title: "状态已更新",
+        description: `问题已标记为${finding.status}。`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "更新失败",
+        description: error instanceof Error ? error.message : "请稍后重试。",
+        variant: "destructive",
+      });
     },
   });
 
@@ -103,9 +123,20 @@ const Results = () => {
   const midCount = filteredIssues.filter((i) => i.risk === "中").length;
   const lowCount = filteredIssues.filter((i) => i.risk === "低").length;
 
-  const handleExport = () => {
-    const exportUrl = `${API_BASE_URL}/findings/export/html${findingsQuery ? `?${findingsQuery}` : ""}`;
-    window.open(exportUrl, "_blank", "noopener,noreferrer");
+  const reportUrl = taskId
+    ? `${API_BASE_URL}/review-tasks/${taskId}/formal-report`
+    : `${API_BASE_URL}/findings/export/formal-html${findingsQuery ? `?${findingsQuery}` : ""}`;
+
+  const handleViewReport = () => {
+    if (!taskId) {
+      toast({
+        title: "缺少任务上下文",
+        description: "请从任务详情页进入结果页后查看正式报告。",
+        variant: "destructive",
+      });
+      return;
+    }
+    window.open(reportUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -115,10 +146,12 @@ const Results = () => {
           <h1 className="text-2xl font-bold text-foreground">审查结果</h1>
           <p className="text-muted-foreground mt-1">查看所有审查发现的问题，支持人工复核</p>
         </div>
-        <Button variant="outline" onClick={handleExport}>
-          <Download className="h-4 w-4 mr-2" />
-          导出 HTML 报告
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleViewReport} disabled={!taskId}>
+            <Download className="h-4 w-4 mr-2" />
+            查看报告
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -199,20 +232,25 @@ const Results = () => {
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">全部 ({filteredIssues.length})</TabsTrigger>
+          <TabsTrigger value="cross">跨章节冲突</TabsTrigger>
           <TabsTrigger value="pending">待复核</TabsTrigger>
           <TabsTrigger value="confirmed">已确认</TabsTrigger>
           <TabsTrigger value="ignored">已忽略</TabsTrigger>
         </TabsList>
 
-        {["all", "pending", "confirmed", "ignored"].map((tab) => {
+        {["all", "cross", "pending", "confirmed", "ignored"].map((tab) => {
           const statusMap: Record<string, string | null> = {
             all: null,
+            cross: null,
             pending: "待复核",
             confirmed: "已确认",
             ignored: "已忽略",
           };
 
-          const tabFiltered = filteredIssues.filter((issue) => !statusMap[tab] || issue.status === statusMap[tab]);
+          const tabFiltered = filteredIssues.filter((issue) => {
+            if (tab === "cross" && issue.reviewStage !== "cross_section_review") return false;
+            return !statusMap[tab] || issue.status === statusMap[tab];
+          });
           const grouped = tabFiltered.reduce<Record<string, FindingListItem[]>>((acc, issue) => {
             (acc[issue.project] ??= []).push(issue);
             return acc;
@@ -248,6 +286,7 @@ const Results = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 ml-4">
+                              <Badge variant="outline">{reviewStageLabel(issue.reviewStage)}</Badge>
                               <Badge variant={riskBadge(issue.risk)}>{issue.risk}风险</Badge>
                               {issue.needsHumanReview && <Badge variant="outline">需复核</Badge>}
                               <Badge variant="outline" className="text-xs">{issue.status}</Badge>
@@ -265,7 +304,7 @@ const Results = () => {
       </Tabs>
 
       <Dialog open={!!selectedIssue} onOpenChange={() => setSelectedIssue(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-4xl">
           {selectedIssue && (
             <>
               <DialogHeader>
@@ -276,6 +315,7 @@ const Results = () => {
               </DialogHeader>
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
+                  <Badge variant="outline">{reviewStageLabel(selectedIssue.reviewStage)}</Badge>
                   <Badge variant={riskBadge(selectedIssue.risk)}>{selectedIssue.risk}风险</Badge>
                   <Badge variant="outline">{selectedIssue.category}</Badge>
                   <Badge variant="outline">{selectedIssue.status}</Badge>

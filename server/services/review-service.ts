@@ -1,7 +1,9 @@
 import { store } from "../store";
-import { ReviewScenario, ReviewTask } from "../types";
+import { Finding, ReviewScenario, ReviewTask } from "../types";
 import { getAiConfig } from "./ai-config-service";
 import { generateAiScenarioFindings } from "./ai-review-service";
+import { generateTaskFormalReport } from "./finding-service";
+import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
 import { createId, generateScenarioFindings, nowIso, summarizeRisk } from "../utils";
 
 const runReviewTaskInBackground = async (taskId: string) => {
@@ -19,7 +21,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
   store.update((current) => ({
     ...current,
     reviewTasks: current.reviewTasks.map((item) =>
-      item.id === taskId ? { ...item, status: "进行中", progress: 35 } : item,
+      item.id === taskId ? { ...item, status: "进行中", stageLabel: "准备审查上下文", progress: 20 } : item,
     ),
     projects: current.projects.map((item) =>
       item.id === project.id ? { ...item, status: "进行中" } : item,
@@ -34,29 +36,79 @@ const runReviewTaskInBackground = async (taskId: string) => {
     aiConfig.enabled &&
     (task.scenario !== "tender_compliance" || latest.regulations.length > 0);
 
-  const findings = canRunAiForScenario
-    ? await generateAiScenarioFindings({
-        scenario: task.scenario,
-        projectId: project.id,
-        taskId,
-        documents: taskDocuments,
-        regulations: latest.regulations,
-      }).catch(() =>
-        generateScenarioFindings(
+  let findings: Finding[] = [];
+  let chapterSummaries: ReviewTask["chapterSummaries"] = [];
+
+  if (canRunAiForScenario && task.scenario === "tender_compliance") {
+    store.update((current) => ({
+      ...current,
+      reviewTasks: current.reviewTasks.map((item) =>
+        item.id === taskId ? { ...item, stageLabel: "进行章节级合规审查", progress: 45 } : item,
+      ),
+    }));
+
+    const tenderResult: { findings: Finding[]; chapterSummaries: ReviewTask["chapterSummaries"] } = await generateTenderChapterAiFindings({
+      projectId: project.id,
+      taskId,
+      tenderDocument: taskDocuments.find((document) => document.role === "tender") ?? taskDocuments[0],
+      regulations: latest.regulations,
+      onProgress: ({ current, total, chapterTitle, stage }) => {
+        store.update((currentState) => ({
+          ...currentState,
+          reviewTasks: currentState.reviewTasks.map((item) =>
+            item.id === taskId
+              ? {
+                  ...item,
+                  stageLabel:
+                    stage === "chapter_review"
+                      ? `正在审查第 ${current}/${total} 章：${chapterTitle}`
+                      : "正在进行跨章节一致性检查",
+                  progress: stage === "chapter_review" ? 35 + Math.floor((current / total) * 35) : 78,
+                }
+              : item,
+          ),
+        }));
+      },
+    }).catch((): { findings: Finding[]; chapterSummaries: ReviewTask["chapterSummaries"] } =>
+      ({
+        findings: generateScenarioFindings(
           task.scenario,
           project.id,
           taskId,
           taskDocuments,
           latest.regulations,
         ),
-      )
-    : generateScenarioFindings(
+        chapterSummaries: [],
+      }),
+    );
+
+    findings = tenderResult.findings;
+    chapterSummaries = tenderResult.chapterSummaries;
+  } else if (canRunAiForScenario) {
+    findings = await generateAiScenarioFindings({
+      scenario: task.scenario,
+      projectId: project.id,
+      taskId,
+      documents: taskDocuments,
+      regulations: latest.regulations,
+    }).catch(() =>
+      generateScenarioFindings(
         task.scenario,
         project.id,
         taskId,
         taskDocuments,
         latest.regulations,
-      );
+      ),
+    );
+  } else {
+    findings = generateScenarioFindings(
+      task.scenario,
+      project.id,
+      taskId,
+      taskDocuments,
+      latest.regulations,
+    );
+  }
 
   const riskLevel = summarizeRisk(findings.map((finding) => finding.risk));
 
@@ -66,7 +118,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
     store.update((current) => ({
       ...current,
       reviewTasks: current.reviewTasks.map((item) =>
-        item.id === taskId ? { ...item, status: "进行中", progress: 80 } : item,
+        item.id === taskId ? { ...item, status: "进行中", stageLabel: "整合审查结果", progress: 80 } : item,
       ),
     }));
 
@@ -76,10 +128,12 @@ const runReviewTaskInBackground = async (taskId: string) => {
   store.update((current) => ({
     ...current,
     reviewTasks: current.reviewTasks.map((item) =>
-      item.id === taskId
+          item.id === taskId
         ? {
             ...item,
             status: "已完成",
+            stageLabel: "正在生成正式报告",
+            chapterSummaries,
             progress: 100,
             riskLevel,
             completedAt: nowIso(),
@@ -89,6 +143,21 @@ const runReviewTaskInBackground = async (taskId: string) => {
     findings: [...current.findings.filter((item) => item.taskId !== taskId), ...findings],
     projects: current.projects.map((item) =>
       item.id === project.id ? { ...item, status: "进行中" } : item,
+    ),
+  }));
+
+  const formalReportHtml = await generateTaskFormalReport(taskId).catch(() => null);
+
+  store.update((current) => ({
+    ...current,
+    reviewTasks: current.reviewTasks.map((item) =>
+      item.id === taskId
+        ? {
+            ...item,
+            formalReportHtml,
+            stageLabel: "审查完成",
+          }
+        : item,
     ),
   }));
 };
@@ -137,6 +206,9 @@ export const createReviewTask = async (params: {
     scenario: params.scenario,
     name: taskName,
     status: "待审查",
+    stageLabel: "等待后台处理",
+    formalReportHtml: null,
+    chapterSummaries: [],
     progress: 0,
     riskLevel: "低",
     documentIds: params.documentIds,
