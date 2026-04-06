@@ -14,7 +14,7 @@ import {
 const navItems = [
   { path: "/", label: "仪表盘", icon: LayoutDashboard },
   { path: "/projects", label: "项目管理", icon: FolderKanban },
-  { path: "/upload", label: "文件上传", icon: Upload },
+  { path: "/upload", label: "文件审查", icon: FileSearch },
   { path: "/results", label: "审查结果", icon: ClipboardCheck },
   { path: "/regulations", label: "法规管理", icon: BookOpen },
 ];
