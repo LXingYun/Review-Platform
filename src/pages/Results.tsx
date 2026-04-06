@@ -117,40 +117,56 @@ const Results = () => {
           <TabsTrigger value="ignored">已忽略</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="all" className="mt-4">
-          <Card className="border border-border shadow-sm">
-            <CardContent className="p-0">
-              <div className="divide-y divide-border">
-                {filtered.map((issue) => (
-                  <div
-                    key={issue.id}
-                    className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => setSelectedIssue(issue)}
-                  >
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
-                      {riskIcon(issue.risk)}
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground">{issue.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-muted-foreground">{issue.project}</span>
-                          <span className="text-xs text-muted-foreground">·</span>
-                          <span className="text-xs text-muted-foreground">{issue.location}</span>
-                        </div>
+        {["all", "pending", "confirmed", "ignored"].map((tab) => {
+          const statusMap: Record<string, string | null> = { all: null, pending: "待复核", confirmed: "已确认", ignored: "已忽略" };
+          const tabFiltered = filtered.filter((i) => !statusMap[tab] || i.status === statusMap[tab]);
+          const grouped = tabFiltered.reduce<Record<string, Issue[]>>((acc, issue) => {
+            (acc[issue.project] ??= []).push(issue);
+            return acc;
+          }, {});
+
+          return (
+            <TabsContent key={tab} value={tab} className="mt-4 space-y-4">
+              {Object.keys(grouped).length === 0 ? (
+                <p className="text-sm text-muted-foreground p-4">暂无数据</p>
+              ) : (
+                Object.entries(grouped).map(([project, projectIssues]) => (
+                  <Card key={project} className="border border-border shadow-sm">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-base font-semibold flex items-center justify-between">
+                        <span>{project}</span>
+                        <Badge variant="outline" className="text-xs font-normal">{projectIssues.length} 个问题</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="divide-y divide-border">
+                        {projectIssues.map((issue) => (
+                          <div
+                            key={issue.id}
+                            className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                            onClick={() => setSelectedIssue(issue)}
+                          >
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              {riskIcon(issue.risk)}
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground">{issue.title}</p>
+                                <span className="text-xs text-muted-foreground">{issue.location}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 ml-4">
+                              <Badge variant={riskBadge(issue.risk)}>{issue.risk}风险</Badge>
+                              <Badge variant="outline" className="text-xs">{issue.status}</Badge>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-4">
-                      <Badge variant={riskBadge(issue.risk)}>{issue.risk}风险</Badge>
-                      <Badge variant="outline" className="text-xs">{issue.status}</Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="pending"><p className="text-sm text-muted-foreground p-4">显示待复核的问题</p></TabsContent>
-        <TabsContent value="confirmed"><p className="text-sm text-muted-foreground p-4">显示已确认的问题</p></TabsContent>
-        <TabsContent value="ignored"><p className="text-sm text-muted-foreground p-4">显示已忽略的问题</p></TabsContent>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </TabsContent>
+          );
+        })}
       </Tabs>
 
       {/* Issue Detail Dialog */}
