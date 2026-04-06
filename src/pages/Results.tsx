@@ -1,34 +1,18 @@
-import { useState } from "react";
-import { Search, Filter, Download, Eye, CheckCircle2, AlertTriangle, XCircle, MessageSquare } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { Search, Filter, Download, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-interface Issue {
-  id: number;
-  title: string;
-  project: string;
-  risk: "高" | "中" | "低";
-  category: string;
-  location: string;
-  status: "待复核" | "已确认" | "已忽略";
-  description: string;
-}
-
-const issues: Issue[] = [
-  { id: 1, title: "投标保证金比例超出法定上限", project: "XX市政工程", risk: "高", category: "资金条款", location: "第3章 第2.1节", status: "待复核", description: "投标保证金要求为项目估算价的3%，超出《招标投标法实施条例》规定的2%上限。" },
-  { id: 2, title: "评标标准设置不合理", project: "XX市政工程", risk: "高", category: "评标办法", location: "第5章 第1.3节", status: "待复核", description: "技术评分中对特定品牌设备给予额外加分，涉嫌排斥潜在投标人。" },
-  { id: 3, title: "工期要求与工程量不匹配", project: "医疗设备采购", risk: "中", category: "合同条款", location: "第4章 第3节", status: "已确认", description: "合同要求30天内完成安装调试，但设备清单包含大型影像设备，通常需要60天。" },
-  { id: 4, title: "资质要求层级偏高", project: "智慧城市项目", risk: "中", category: "资格条件", location: "第2章 第1节", status: "待复核", description: "要求投标人具有特级资质，但项目规模仅需一级资质即可满足。" },
-  { id: 5, title: "付款条件存在风险", project: "高速公路建设", risk: "低", category: "合同条款", location: "第6章 第4.2节", status: "已忽略", description: "预付款比例为10%，低于行业惯例但不违反法规。" },
-  { id: 6, title: "投标文件格式要求过于严苛", project: "学校建设工程", risk: "低", category: "投标须知", location: "第1章 第5节", status: "已确认", description: "要求投标文件必须使用特定软件生成，可能限制部分投标人参与。" },
-];
+import { API_BASE_URL, apiRequest } from "@/lib/api";
+import { FindingListItem } from "@/lib/api-types";
 
 const riskIcon = (risk: string) => {
   if (risk === "高") return <XCircle className="h-4 w-4 text-destructive" />;
@@ -42,17 +26,87 @@ const riskBadge = (risk: string) => {
   return "outline" as const;
 };
 
-const Results = () => {
-  const [search, setSearch] = useState("");
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+const ChunkGroup = ({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ label: string; text: string }>;
+}) => {
+  if (items.length === 0) return null;
 
-  const filtered = issues.filter(
-    (i) => i.title.includes(search) || i.project.includes(search) || i.category.includes(search)
+  return (
+    <div>
+      <Label className="text-xs text-muted-foreground">{title}</Label>
+      <div className="mt-2 space-y-2">
+        {items.map((item) => (
+          <div key={`${title}-${item.label}-${item.text}`} className="rounded-lg border border-border bg-muted/50 p-3">
+            <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
+            <p className="text-sm text-foreground mt-1">{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
+};
 
-  const highCount = issues.filter((i) => i.risk === "高").length;
-  const midCount = issues.filter((i) => i.risk === "中").length;
-  const lowCount = issues.filter((i) => i.risk === "低").length;
+const Results = () => {
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState("");
+  const [selectedIssue, setSelectedIssue] = useState<FindingListItem | null>(null);
+  const [humanReviewFilter, setHumanReviewFilter] = useState<"all" | "needs_review" | "no_review">("all");
+  const [confidenceFilter, setConfidenceFilter] = useState<"all" | "ge_80" | "ge_60" | "lt_60">("all");
+
+  const projectId = searchParams.get("projectId") ?? "";
+  const scenario = searchParams.get("scenario") ?? "";
+
+  const findingsQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (projectId) params.set("projectId", projectId);
+    if (scenario) params.set("scenario", scenario);
+    return params.toString();
+  }, [projectId, scenario, search]);
+
+  const { data: issues = [], isLoading, isError } = useQuery({
+    queryKey: ["findings", search, projectId, scenario],
+    queryFn: () => apiRequest<FindingListItem[]>(`/findings${findingsQuery ? `?${findingsQuery}` : ""}`),
+  });
+
+  const filteredIssues = useMemo(() => {
+    return issues.filter((issue) => {
+      if (humanReviewFilter === "needs_review" && !issue.needsHumanReview) return false;
+      if (humanReviewFilter === "no_review" && issue.needsHumanReview) return false;
+
+      if (confidenceFilter === "ge_80" && issue.confidence < 0.8) return false;
+      if (confidenceFilter === "ge_60" && issue.confidence < 0.6) return false;
+      if (confidenceFilter === "lt_60" && issue.confidence >= 0.6) return false;
+
+      return true;
+    });
+  }, [issues, humanReviewFilter, confidenceFilter]);
+
+  const updateFindingMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "待复核" | "已确认" | "已忽略" }) =>
+      apiRequest<FindingListItem>(`/findings/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: (finding) => {
+      setSelectedIssue(finding);
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+    },
+  });
+
+  const highCount = filteredIssues.filter((i) => i.risk === "高").length;
+  const midCount = filteredIssues.filter((i) => i.risk === "中").length;
+  const lowCount = filteredIssues.filter((i) => i.risk === "低").length;
+
+  const handleExport = () => {
+    const exportUrl = `${API_BASE_URL}/findings/export/html${findingsQuery ? `?${findingsQuery}` : ""}`;
+    window.open(exportUrl, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="space-y-6">
@@ -61,13 +115,12 @@ const Results = () => {
           <h1 className="text-2xl font-bold text-foreground">审查结果</h1>
           <p className="text-muted-foreground mt-1">查看所有审查发现的问题，支持人工复核</p>
         </div>
-        <Button variant="outline">
+        <Button variant="outline" onClick={handleExport}>
           <Download className="h-4 w-4 mr-2" />
-          导出报告
+          导出 HTML 报告
         </Button>
       </div>
 
-      {/* Risk summary */}
       <div className="grid grid-cols-3 gap-4">
         <Card className="border-destructive/20 bg-destructive/5">
           <CardContent className="p-4 flex items-center gap-3">
@@ -98,8 +151,7 @@ const Results = () => {
         </Card>
       </div>
 
-      {/* Search & Tabs */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="搜索问题..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
@@ -107,27 +159,69 @@ const Results = () => {
         <Button variant="outline" size="sm">
           <Filter className="h-4 w-4 mr-1" /> 筛选
         </Button>
+        <Select value={humanReviewFilter} onValueChange={(value) => setHumanReviewFilter(value as typeof humanReviewFilter)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="人工复核筛选" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部复核状态</SelectItem>
+            <SelectItem value="needs_review">仅需人工复核</SelectItem>
+            <SelectItem value="no_review">仅无需人工复核</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={confidenceFilter} onValueChange={(value) => setConfidenceFilter(value as typeof confidenceFilter)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="置信度筛选" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部置信度</SelectItem>
+            <SelectItem value="ge_80">80%以上</SelectItem>
+            <SelectItem value="ge_60">60%以上</SelectItem>
+            <SelectItem value="lt_60">60%以下</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+
+      {(projectId || scenario || humanReviewFilter !== "all" || confidenceFilter !== "all") && (
+        <div className="flex flex-wrap gap-2">
+          {projectId && <Badge variant="outline">项目筛选中</Badge>}
+          {scenario && <Badge variant="outline">场景: {scenario === "tender_compliance" ? "招标审查" : "投标审查"}</Badge>}
+          {humanReviewFilter === "needs_review" && <Badge variant="outline">仅看需人工复核</Badge>}
+          {humanReviewFilter === "no_review" && <Badge variant="outline">仅看无需人工复核</Badge>}
+          {confidenceFilter === "ge_80" && <Badge variant="outline">置信度 80% 以上</Badge>}
+          {confidenceFilter === "ge_60" && <Badge variant="outline">置信度 60% 以上</Badge>}
+          {confidenceFilter === "lt_60" && <Badge variant="outline">置信度 60% 以下</Badge>}
+        </div>
+      )}
+
+      {isError && <p className="text-sm text-destructive">问题数据加载失败</p>}
 
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">全部 ({issues.length})</TabsTrigger>
+          <TabsTrigger value="all">全部 ({filteredIssues.length})</TabsTrigger>
           <TabsTrigger value="pending">待复核</TabsTrigger>
           <TabsTrigger value="confirmed">已确认</TabsTrigger>
           <TabsTrigger value="ignored">已忽略</TabsTrigger>
         </TabsList>
 
         {["all", "pending", "confirmed", "ignored"].map((tab) => {
-          const statusMap: Record<string, string | null> = { all: null, pending: "待复核", confirmed: "已确认", ignored: "已忽略" };
-          const tabFiltered = filtered.filter((i) => !statusMap[tab] || i.status === statusMap[tab]);
-          const grouped = tabFiltered.reduce<Record<string, Issue[]>>((acc, issue) => {
+          const statusMap: Record<string, string | null> = {
+            all: null,
+            pending: "待复核",
+            confirmed: "已确认",
+            ignored: "已忽略",
+          };
+
+          const tabFiltered = filteredIssues.filter((issue) => !statusMap[tab] || issue.status === statusMap[tab]);
+          const grouped = tabFiltered.reduce<Record<string, FindingListItem[]>>((acc, issue) => {
             (acc[issue.project] ??= []).push(issue);
             return acc;
           }, {});
 
           return (
             <TabsContent key={tab} value={tab} className="mt-4 space-y-4">
-              {Object.keys(grouped).length === 0 ? (
+              {isLoading && <p className="text-sm text-muted-foreground p-4">问题加载中...</p>}
+              {!isLoading && Object.keys(grouped).length === 0 ? (
                 <p className="text-sm text-muted-foreground p-4">暂无数据</p>
               ) : (
                 Object.entries(grouped).map(([project, projectIssues]) => (
@@ -155,6 +249,7 @@ const Results = () => {
                             </div>
                             <div className="flex items-center gap-2 ml-4">
                               <Badge variant={riskBadge(issue.risk)}>{issue.risk}风险</Badge>
+                              {issue.needsHumanReview && <Badge variant="outline">需复核</Badge>}
                               <Badge variant="outline" className="text-xs">{issue.status}</Badge>
                             </div>
                           </div>
@@ -169,7 +264,6 @@ const Results = () => {
         })}
       </Tabs>
 
-      {/* Issue Detail Dialog */}
       <Dialog open={!!selectedIssue} onOpenChange={() => setSelectedIssue(null)}>
         <DialogContent className="max-w-lg">
           {selectedIssue && (
@@ -185,24 +279,76 @@ const Results = () => {
                   <Badge variant={riskBadge(selectedIssue.risk)}>{selectedIssue.risk}风险</Badge>
                   <Badge variant="outline">{selectedIssue.category}</Badge>
                   <Badge variant="outline">{selectedIssue.status}</Badge>
+                  <Badge variant="outline">置信度 {Math.round(selectedIssue.confidence * 100)}%</Badge>
+                  {selectedIssue.needsHumanReview && <Badge variant="outline">建议人工复核</Badge>}
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">原文定位</Label>
-                  <p className="text-sm mt-1 p-3 rounded-lg bg-muted">{selectedIssue.location} — {selectedIssue.project}</p>
+                  <p className="text-sm mt-1 p-3 rounded-lg bg-muted">{selectedIssue.location} - {selectedIssue.project}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">问题描述</Label>
                   <p className="text-sm mt-1 text-foreground">{selectedIssue.description}</p>
                 </div>
                 <div>
+                  <Label className="text-xs text-muted-foreground">处理建议</Label>
+                  <p className="text-sm mt-1 text-foreground">{selectedIssue.recommendation}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">引用依据</Label>
+                  <div className="mt-2 space-y-2">
+                    {selectedIssue.references.map((reference) => (
+                      <p key={reference} className="text-sm rounded-lg bg-muted px-3 py-2">
+                        {reference}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                <ChunkGroup
+                  title="招标原文片段"
+                  items={selectedIssue.sourceChunks.map((chunk) => ({
+                    label: `${chunk.documentName} · 片段 ${chunk.order}`,
+                    text: chunk.text,
+                  }))}
+                />
+                <ChunkGroup
+                  title="投标响应片段"
+                  items={selectedIssue.candidateChunks.map((chunk) => ({
+                    label: `${chunk.documentName} · 片段 ${chunk.order}`,
+                    text: chunk.text,
+                  }))}
+                />
+                <ChunkGroup
+                  title="法规依据片段"
+                  items={selectedIssue.regulationChunks.map((chunk) => ({
+                    label: `${chunk.regulationName} [${chunk.regulationCategory}]${chunk.sectionTitle ? ` · ${chunk.sectionTitle}` : ""} · 条款片段 ${chunk.order}`,
+                    text: chunk.text,
+                  }))}
+                />
+                <div>
                   <Label className="text-xs text-muted-foreground">复核备注</Label>
                   <Textarea placeholder="输入复核意见..." className="mt-1" />
                 </div>
                 <div className="flex gap-2">
-                  <Button className="flex-1">
+                  <Button
+                    className="flex-1"
+                    disabled={updateFindingMutation.isPending}
+                    onClick={() =>
+                      updateFindingMutation.mutate({ id: selectedIssue.id, status: "已确认" })
+                    }
+                  >
                     <CheckCircle2 className="h-4 w-4 mr-1" /> 确认问题
                   </Button>
-                  <Button variant="outline" className="flex-1">忽略</Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    disabled={updateFindingMutation.isPending}
+                    onClick={() =>
+                      updateFindingMutation.mutate({ id: selectedIssue.id, status: "已忽略" })
+                    }
+                  >
+                    忽略
+                  </Button>
                 </div>
               </div>
             </>

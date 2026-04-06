@@ -1,0 +1,194 @@
+import express from "express";
+import cors from "cors";
+import multer from "multer";
+import { ZodError } from "zod";
+import { getDashboardSummary } from "./services/dashboard-service";
+import { saveUploadedDocument, listDocuments, deleteDocument } from "./services/document-service";
+import { exportFindingsHtmlReport, exportFindingsReport, listFindings, updateFindingStatus } from "./services/finding-service";
+import { createProject, deleteProject, listProjects } from "./services/project-service";
+import { createRegulation, deleteRegulation, importRegulationFromFile, listRegulations, previewRegulationFromFile, updateRegulation } from "./services/regulation-service";
+import { createReviewTask, deleteReviewTask, listTasks } from "./services/review-service";
+import {
+  createBidReviewSchema,
+  createProjectSchema,
+  createRegulationSchema,
+  createTenderReviewSchema,
+  updateFindingStatusSchema,
+  uploadDocumentSchema,
+} from "./validators";
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+export const createApp = () => {
+  const app = express();
+
+  app.use(cors());
+  app.use(express.json());
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true, service: "deep-read-pro-api" });
+  });
+
+  app.get("/api/dashboard", (_req, res) => {
+    res.json(getDashboardSummary());
+  });
+
+  app.get("/api/projects", (req, res) => {
+    res.json(listProjects(String(req.query.search ?? "")));
+  });
+
+  app.post("/api/projects", (req, res) => {
+    const input = createProjectSchema.parse(req.body);
+    res.status(201).json(createProject(input));
+  });
+
+  app.delete("/api/projects/:projectId", (req, res) => {
+    res.json(deleteProject(req.params.projectId));
+  });
+
+  app.get("/api/documents", (req, res) => {
+    const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
+    res.json(listDocuments(projectId));
+  });
+
+  app.delete("/api/documents/:documentId", (req, res) => {
+    res.json(deleteDocument(req.params.documentId));
+  });
+
+  // Upload is file-backed so the frontend can start using real multipart flows.
+  app.post("/api/documents/upload", upload.single("file"), async (req, res) => {
+    const input = uploadDocumentSchema.parse(req.body);
+
+    if (!req.file) {
+      return res.status(400).json({ message: "缺少上传文件" });
+    }
+
+    res.status(201).json(
+      await saveUploadedDocument({
+        projectId: input.projectId,
+        role: input.role,
+        file: req.file,
+      }),
+    );
+  });
+
+  app.get("/api/review-tasks", (req, res) => {
+    const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
+    res.json(listTasks(projectId));
+  });
+
+  app.delete("/api/review-tasks/:taskId", (req, res) => {
+    res.json(deleteReviewTask(req.params.taskId));
+  });
+
+  app.post("/api/reviews/tender-compliance", async (req, res) => {
+    const input = createTenderReviewSchema.parse(req.body);
+    res.status(201).json(
+      await createReviewTask({
+        projectId: input.projectId,
+        scenario: "tender_compliance",
+        documentIds: [input.tenderDocumentId, ...input.regulationIds],
+      }),
+    );
+  });
+
+  app.post("/api/reviews/bid-consistency", async (req, res) => {
+    const input = createBidReviewSchema.parse(req.body);
+    res.status(201).json(
+      await createReviewTask({
+        projectId: input.projectId,
+        scenario: "bid_consistency",
+        documentIds: [input.tenderDocumentId, input.bidDocumentId],
+      }),
+    );
+  });
+
+  app.get("/api/findings", (req, res) => {
+    res.json(
+      listFindings({
+        search: req.query.search ? String(req.query.search) : undefined,
+        status: req.query.status ? (String(req.query.status) as never) : undefined,
+        projectId: req.query.projectId ? String(req.query.projectId) : undefined,
+        scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
+      }),
+    );
+  });
+
+  app.get("/api/findings/export", (req, res) => {
+    const content = exportFindingsReport({
+      search: req.query.search ? String(req.query.search) : undefined,
+      status: req.query.status ? (String(req.query.status) as never) : undefined,
+      projectId: req.query.projectId ? String(req.query.projectId) : undefined,
+      scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
+    });
+
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="review-report.md"');
+    res.send(content);
+  });
+
+  app.get("/api/findings/export/html", (req, res) => {
+    const content = exportFindingsHtmlReport({
+      search: req.query.search ? String(req.query.search) : undefined,
+      status: req.query.status ? (String(req.query.status) as never) : undefined,
+      projectId: req.query.projectId ? String(req.query.projectId) : undefined,
+      scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
+    });
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(content);
+  });
+
+  app.patch("/api/findings/:findingId/status", (req, res) => {
+    const input = updateFindingStatusSchema.parse(req.body);
+    res.json(updateFindingStatus(req.params.findingId, input.status));
+  });
+
+  app.get("/api/regulations", (req, res) => {
+    res.json(listRegulations(String(req.query.search ?? "")));
+  });
+
+  app.post("/api/regulations", (req, res) => {
+    const input = createRegulationSchema.parse(req.body);
+    res.status(201).json(createRegulation(input));
+  });
+
+  app.put("/api/regulations/:regulationId", (req, res) => {
+    const input = createRegulationSchema.parse(req.body);
+    res.json(updateRegulation(req.params.regulationId, input));
+  });
+
+  app.post("/api/regulations/upload", upload.single("file"), async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "缺少法规文件" });
+    }
+
+    res.status(201).json(await importRegulationFromFile(req.file));
+  });
+
+  app.post("/api/regulations/upload/preview", upload.single("file"), async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "缺少法规文件" });
+    }
+
+    res.status(200).json(await previewRegulationFromFile(req.file));
+  });
+
+  app.delete("/api/regulations/:regulationId", (req, res) => {
+    res.json(deleteRegulation(req.params.regulationId));
+  });
+
+  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof ZodError) {
+      return res.status(400).json({
+        message: "请求参数校验失败",
+        issues: error.issues,
+      });
+    }
+
+    const message = error instanceof Error ? error.message : "服务器内部错误";
+    return res.status(500).json({ message });
+  });
+
+  return app;
+};

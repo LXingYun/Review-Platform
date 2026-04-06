@@ -6,24 +6,19 @@ import {
   TrendingUp,
   ArrowUpRight,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { apiRequest } from "@/lib/api";
+import { DashboardResponse } from "@/lib/api-types";
 
-const stats = [
-  { label: "审查项目总数", value: "128", icon: FileText, change: "+12%", color: "text-primary" },
-  { label: "待处理任务", value: "23", icon: Clock, change: "-5%", color: "text-warning" },
-  { label: "发现问题", value: "347", icon: AlertTriangle, change: "+8%", color: "text-destructive" },
-  { label: "已完成审查", value: "96", icon: CheckCircle2, change: "+15%", color: "text-success" },
-];
-
-const recentTasks = [
-  { id: 1, name: "XX市政工程招标文件审查", status: "进行中", risk: "高", progress: 65 },
-  { id: 2, name: "医疗设备采购投标文件审查", status: "待审查", risk: "中", progress: 0 },
-  { id: 3, name: "智慧城市项目招标合规审查", status: "已完成", risk: "低", progress: 100 },
-  { id: 4, name: "高速公路建设投标资质审查", status: "进行中", risk: "高", progress: 40 },
-  { id: 5, name: "学校建设工程招标文件复核", status: "已完成", risk: "中", progress: 100 },
-];
+const statIcons = {
+  审查项目总数: FileText,
+  待处理任务: Clock,
+  发现问题: AlertTriangle,
+  已完成审查: CheckCircle2,
+} as const;
 
 const riskBadgeVariant = (risk: string) => {
   if (risk === "高") return "destructive";
@@ -38,6 +33,14 @@ const statusColor = (status: string) => {
 };
 
 const Dashboard = () => {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: () => apiRequest<DashboardResponse>("/dashboard"),
+  });
+
+  const stats = data?.stats ?? [];
+  const recentTasks = data?.recentTasks ?? [];
+
   return (
     <div className="space-y-6">
       <div>
@@ -45,33 +48,45 @@ const Dashboard = () => {
         <p className="text-muted-foreground mt-1">招投标文件智能审查平台概览</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border border-border shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                  <p className="text-3xl font-bold text-foreground mt-1">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-xl bg-secondary ${stat.color}`}>
-                  <stat.icon className="h-6 w-6" />
-                </div>
-              </div>
-              <div className="flex items-center gap-1 mt-3 text-xs text-muted-foreground">
-                <TrendingUp className="h-3 w-3" />
-                <span className={stat.change.startsWith("+") ? "text-success" : "text-destructive"}>
-                  {stat.change}
-                </span>
-                <span>较上月</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {isLoading &&
+          Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index} className="border border-border shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">加载中...</p>
+              </CardContent>
+            </Card>
+          ))}
+
+        {!isLoading &&
+          stats.map((stat) => {
+            const Icon = statIcons[stat.label as keyof typeof statIcons] ?? FileText;
+
+            return (
+              <Card key={stat.label} className="border border-border shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{stat.label}</p>
+                      <p className="text-3xl font-bold text-foreground mt-1">{stat.value}</p>
+                    </div>
+                    <div className={`p-3 rounded-xl bg-secondary ${stat.color}`}>
+                      <Icon className="h-6 w-6" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 mt-3 text-xs text-muted-foreground">
+                    <TrendingUp className="h-3 w-3" />
+                    <span className={stat.change.startsWith("+") ? "text-success" : "text-destructive"}>
+                      {stat.change}
+                    </span>
+                    <span>较上月</span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
       </div>
 
-      {/* Recent Tasks */}
       <Card className="border border-border shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -82,6 +97,10 @@ const Dashboard = () => {
           </div>
         </CardHeader>
         <CardContent>
+          {isError && <p className="text-sm text-destructive">仪表盘数据加载失败</p>}
+          {!isError && recentTasks.length === 0 && !isLoading && (
+            <p className="text-sm text-muted-foreground">暂无任务</p>
+          )}
           <div className="space-y-3">
             {recentTasks.map((task) => (
               <div

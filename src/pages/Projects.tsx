@@ -1,32 +1,28 @@
 import { useState } from "react";
-import { Plus, Search, MoreVertical, FolderKanban } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, FolderKanban, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-interface Project {
-  id: number;
-  name: string;
-  type: string;
-  status: string;
-  taskCount: number;
-  issueCount: number;
-  date: string;
-}
-
-const initialProjects: Project[] = [
-  { id: 1, name: "XX市政工程", type: "招标审查", status: "进行中", taskCount: 5, issueCount: 12, date: "2026-04-01" },
-  { id: 2, name: "医疗设备采购", type: "投标审查", status: "已完成", taskCount: 3, issueCount: 4, date: "2026-03-28" },
-  { id: 3, name: "智慧城市项目", type: "招标审查", status: "待开始", taskCount: 0, issueCount: 0, date: "2026-04-05" },
-  { id: 4, name: "高速公路建设", type: "投标审查", status: "进行中", taskCount: 8, issueCount: 23, date: "2026-03-20" },
-  { id: 5, name: "学校建设工程", type: "招标审查", status: "已完成", taskCount: 4, issueCount: 7, date: "2026-03-15" },
-  { id: 6, name: "水利工程建设", type: "投标审查", status: "待开始", taskCount: 0, issueCount: 0, date: "2026-04-06" },
-];
+import { apiRequest } from "@/lib/api";
+import { ProjectListItem } from "@/lib/api-types";
 
 const statusStyle = (status: string) => {
   if (status === "进行中") return "bg-primary/10 text-primary border-primary/20";
@@ -35,10 +31,43 @@ const statusStyle = (status: string) => {
 };
 
 const Projects = () => {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [projects] = useState<Project[]>(initialProjects);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"招标审查" | "投标审查" | "">("");
+  const [description, setDescription] = useState("");
 
-  const filtered = projects.filter((p) => p.name.includes(search) || p.type.includes(search));
+  const { data: projects = [], isLoading, isError } = useQuery({
+    queryKey: ["projects", search],
+    queryFn: () => apiRequest<ProjectListItem[]>(`/projects?search=${encodeURIComponent(search)}`),
+  });
+
+  const createProjectMutation = useMutation({
+    mutationFn: (payload: { name: string; type: "招标审查" | "投标审查"; description: string }) =>
+      apiRequest<ProjectListItem>("/projects", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      setOpen(false);
+      setName("");
+      setType("");
+      setDescription("");
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: (projectId: string) =>
+      apiRequest<{ success: boolean; projectId: string }>(`/projects/${projectId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -47,7 +76,7 @@ const Projects = () => {
           <h1 className="text-2xl font-bold text-foreground">项目管理</h1>
           <p className="text-muted-foreground mt-1">管理所有审查项目与任务</p>
         </div>
-        <Dialog>
+        <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -61,25 +90,34 @@ const Projects = () => {
             <div className="space-y-4 pt-2">
               <div>
                 <Label>项目名称</Label>
-                <Input placeholder="输入项目名称" className="mt-1" />
+                <Input placeholder="输入项目名称" className="mt-1" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div>
                 <Label>审查类型</Label>
-                <Select>
+                <Select value={type} onValueChange={(value) => setType(value as "招标审查" | "投标审查")}>
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="选择类型" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bid">招标审查</SelectItem>
-                    <SelectItem value="tender">投标审查</SelectItem>
+                    <SelectItem value="招标审查">招标审查</SelectItem>
+                    <SelectItem value="投标审查">投标审查</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>项目描述</Label>
-                <Textarea placeholder="输入项目描述" className="mt-1" />
+                <Textarea placeholder="输入项目描述" className="mt-1" value={description} onChange={(e) => setDescription(e.target.value)} />
               </div>
-              <Button className="w-full">创建项目</Button>
+              <Button
+                className="w-full"
+                disabled={!name || !type || createProjectMutation.isPending}
+                onClick={() => {
+                  if (!type) return;
+                  createProjectMutation.mutate({ name, type, description });
+                }}
+              >
+                {createProjectMutation.isPending ? "创建中..." : "创建项目"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -95,9 +133,15 @@ const Projects = () => {
         />
       </div>
 
+      {isLoading && <p className="text-sm text-muted-foreground">项目加载中...</p>}
+      {isError && <p className="text-sm text-destructive">项目数据加载失败</p>}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((project) => (
-          <Card key={project.id} className="border border-border shadow-sm hover:shadow-md transition-shadow cursor-pointer group">
+        {projects.map((project) => (
+          <Card
+            key={project.id}
+            className="border border-border shadow-sm hover:shadow-md transition-shadow group"
+          >
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -109,9 +153,6 @@ const Projects = () => {
                     <p className="text-xs text-muted-foreground">{project.type}</p>
                   </div>
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground">
-                  <MoreVertical className="h-4 w-4" />
-                </button>
               </div>
               <div className="flex items-center gap-3 mt-4">
                 <Badge variant="outline" className={statusStyle(project.status)}>
@@ -119,9 +160,49 @@ const Projects = () => {
                 </Badge>
                 <span className="text-xs text-muted-foreground">{project.date}</span>
               </div>
-              <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                <span>任务: {project.taskCount}</span>
-                <span>问题: {project.issueCount}</span>
+                <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                  <span>任务: {project.taskCount}</span>
+                  <span>问题: {project.issueCount}</span>
+                </div>
+              <div className="mt-4 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => navigate(`/projects/${project.id}`)}
+                >
+                  查看详情
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-3"
+                      onClick={(event) => event.stopPropagation()}
+                      disabled={deleteProjectMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>删除项目？</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        这会删除项目、任务、问题记录以及关联的已上传文件，且无法恢复。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteProjectMutation.mutate(project.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        确认删除
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </CardContent>
           </Card>

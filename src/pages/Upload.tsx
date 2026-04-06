@@ -1,86 +1,272 @@
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Upload as UploadIcon,
   FileText,
-  X,
   CheckCircle2,
   Loader2,
-  FileSearch,
   ArrowLeft,
   ArrowRight,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-
-interface UploadedFile {
-  id: number;
-  name: string;
-  size: string;
-  status: "uploading" | "parsing" | "done";
-}
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiRequest } from "@/lib/api";
+import { DocumentItem, ProjectListItem, ReviewTaskResult } from "@/lib/api-types";
+import { useToast } from "@/hooks/use-toast";
 
 type ReviewType = "bid" | "tender" | null;
 type Step = "select" | "upload-bid" | "upload-tender-bid" | "upload-tender-tender";
+type UploadRole = "tender" | "bid";
+
+const toDisplaySize = (sizeBytes: number) => `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+
+const parseMethodLabel = (parseMethod: DocumentItem["parseMethod"]) => {
+  if (parseMethod === "pdf-text") return "PDF文本";
+  if (parseMethod === "plain-text") return "纯文本";
+  if (parseMethod === "image-ocr") return "图片OCR";
+  return "占位解析";
+};
+
+const reviewTypeFromProjectType = (projectType: ProjectListItem["type"]): ReviewType => {
+  if (projectType === "招标审查") return "bid";
+  if (projectType === "投标审查") return "tender";
+  return null;
+};
 
 const Upload = () => {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { toast } = useToast();
+  const tenderInputRef = useRef<HTMLInputElement | null>(null);
+  const bidInputRef = useRef<HTMLInputElement | null>(null);
+
   const [reviewType, setReviewType] = useState<ReviewType>(null);
   const [step, setStep] = useState<Step>("select");
   const [dragActive, setDragActive] = useState(false);
-  const [bidFiles, setBidFiles] = useState<UploadedFile[]>([]);
-  const [tenderFiles, setTenderFiles] = useState<UploadedFile[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
 
-  const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(e.type === "dragenter" || e.type === "dragover");
+  const presetProjectId = searchParams.get("projectId") ?? "";
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects", "upload"],
+    queryFn: () => apiRequest<ProjectListItem[]>("/projects"),
+  });
+
+  useEffect(() => {
+    if (!presetProjectId || selectedProjectId) return;
+    const project = projects.find((item) => item.id === presetProjectId);
+    if (!project) return;
+
+    setSelectedProjectId(presetProjectId);
+    setReviewType((current) => current ?? reviewTypeFromProjectType(project.type));
+  }, [presetProjectId, projects, selectedProjectId]);
+
+  const { data: documents = [] } = useQuery({
+    queryKey: ["documents", selectedProjectId],
+    queryFn: () => apiRequest<DocumentItem[]>(`/documents?projectId=${encodeURIComponent(selectedProjectId)}`),
+    enabled: Boolean(selectedProjectId),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async ({ file, role }: { file: File; role: UploadRole }) => {
+      if (!selectedProjectId) {
+        throw new Error("请先选择项目");
+      }
+
+      const formData = new FormData();
+      formData.append("projectId", selectedProjectId);
+      formData.append("role", role);
+      formData.append("file", file);
+
+      return apiRequest<DocumentItem>("/documents/upload", {
+        method: "POST",
+        body: formData,
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["documents", selectedProjectId] });
+      toast({
+        title: "上传成功",
+        description: `${variables.file.name} 已完成上传并进入可审查状态。`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "上传失败",
+        description: error instanceof Error ? error.message : "文件上传失败，请稍后再试。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const tenderReviewMutation = useMutation({
+    mutationFn: (payload: { projectId: string; tenderDocumentId: string }) =>
+      apiRequest<ReviewTaskResult>("/reviews/tender-compliance", {
+        method: "POST",
+        body: JSON.stringify({
+          projectId: payload.projectId,
+          tenderDocumentId: payload.tenderDocumentId,
+          regulationIds: [],
+        }),
+      }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast({
+        title: "审查任务已创建",
+        description: `${result.task.name} 已进入审查队列。`,
+      });
+      navigate(`/tasks/${result.task.id}`);
+    },
+    onError: (error) => {
+      toast({
+        title: "创建审查失败",
+        description: error instanceof Error ? error.message : "请稍后重试。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bidReviewMutation = useMutation({
+    mutationFn: (payload: { projectId: string; tenderDocumentId: string; bidDocumentId: string }) =>
+      apiRequest<ReviewTaskResult>("/reviews/bid-consistency", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast({
+        title: "审查任务已创建",
+        description: `${result.task.name} 已进入审查队列。`,
+      });
+      navigate(`/tasks/${result.task.id}`);
+    },
+    onError: (error) => {
+      toast({
+        title: "创建审查失败",
+        description: error instanceof Error ? error.message : "请稍后重试。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: (documentId: string) =>
+      apiRequest<{ success: boolean; documentId: string }>(`/documents/${documentId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents", selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast({
+        title: "文件已删除",
+        description: "关联的审查任务和结果已同步清理。",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "删除失败",
+        description: error instanceof Error ? error.message : "请稍后重试。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDrag = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(event.type === "dragenter" || event.type === "dragover");
   }, []);
 
-  const addMockFile = (
-    setter: React.Dispatch<React.SetStateAction<UploadedFile[]>>,
-    label: string
-  ) => {
-    const newFile: UploadedFile = {
-      id: Date.now(),
-      name: `${label}_${Date.now()}.pdf`,
-      size: `${(Math.random() * 15 + 1).toFixed(1)} MB`,
-      status: "uploading",
-    };
-    setter((prev) => [newFile, ...prev]);
-    setTimeout(() => {
-      setter((prev) =>
-        prev.map((f) => (f.id === newFile.id ? { ...f, status: "parsing" } : f))
-      );
-    }, 1500);
-    setTimeout(() => {
-      setter((prev) =>
-        prev.map((f) => (f.id === newFile.id ? { ...f, status: "done" } : f))
-      );
-    }, 3500);
+  const handleProjectChange = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    const project = projects.find((item) => item.id === projectId);
+    setReviewType(project ? reviewTypeFromProjectType(project.type) : null);
+    setStep("select");
   };
 
-  const removeFile = (
-    setter: React.Dispatch<React.SetStateAction<UploadedFile[]>>,
-    id: number
-  ) => setter((prev) => prev.filter((f) => f.id !== id));
+  useEffect(() => {
+    if (!selectedProjectId || !reviewType || step !== "select") return;
 
-  const statusBadge = (status: UploadedFile["status"]) => {
-    if (status === "uploading")
+    setStep(reviewType === "bid" ? "upload-bid" : "upload-tender-bid");
+  }, [selectedProjectId, reviewType, step]);
+
+  const handleBack = () => {
+    if (step === "upload-bid" || step === "upload-tender-bid") {
+      setStep("select");
+      return;
+    }
+
+    if (step === "upload-tender-tender") {
+      setStep("upload-tender-bid");
+    }
+  };
+
+  const projectDocuments = useMemo(() => documents, [documents]);
+  const tenderFiles = projectDocuments.filter((document) => document.role === "tender");
+  const bidFiles = projectDocuments.filter((document) => document.role === "bid");
+  const latestTender = tenderFiles[0];
+  const latestBid = bidFiles[0];
+
+  const handleFileUpload = (files: FileList | null, role: UploadRole) => {
+    if (!files?.length) return;
+
+    Array.from(files).forEach((file) => {
+      uploadMutation.mutate({ file, role });
+    });
+  };
+
+  const openPicker = (role: UploadRole) => {
+    if (role === "tender") {
+      tenderInputRef.current?.click();
+      return;
+    }
+
+    bidInputRef.current?.click();
+  };
+
+  const statusBadge = (status: DocumentItem["parseStatus"]) => {
+    if (status === "待解析") {
       return (
         <Badge variant="secondary">
           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-          上传中
+          待解析
         </Badge>
       );
-    if (status === "parsing")
+    }
+
+    if (status === "解析中") {
       return (
         <Badge variant="secondary" className="bg-warning/10 text-warning border-warning/20">
           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
           解析中
         </Badge>
       );
+    }
+
     return (
       <Badge variant="secondary" className="bg-success/10 text-success border-success/20">
         <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -89,47 +275,56 @@ const Upload = () => {
     );
   };
 
-  const handleSelectType = () => {
-    if (!reviewType) return;
-    if (reviewType === "bid") {
-      setStep("upload-bid");
-    } else {
-      setStep("upload-tender-bid");
-    }
-  };
+  const renderProjectSelector = () => (
+    <Card className="border border-border shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">选择项目</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Label>当前审查任务所属项目</Label>
+        <Select value={selectedProjectId} onValueChange={handleProjectChange}>
+          <SelectTrigger>
+            <SelectValue placeholder="请选择一个项目" />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((project) => (
+              <SelectItem key={project.id} value={project.id}>
+                {project.name} · {project.type}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </CardContent>
+    </Card>
+  );
 
-  const handleBack = () => {
-    if (step === "upload-bid" || step === "upload-tender-bid") {
-      setStep("select");
-      setReviewType(null);
-      setBidFiles([]);
-      setTenderFiles([]);
-    } else if (step === "upload-tender-tender") {
-      setStep("upload-tender-bid");
-    }
-  };
-
-  const allDone = (files: UploadedFile[]) =>
-    files.length > 0 && files.every((f) => f.status === "done");
-
-  const renderDropZone = (
-    setter: React.Dispatch<React.SetStateAction<UploadedFile[]>>,
-    label: string,
-    files: UploadedFile[]
-  ) => (
+  const renderDropZone = (role: UploadRole, title: string, files: DocumentItem[]) => (
     <div className="space-y-4">
+      <input
+        ref={role === "tender" ? tenderInputRef : bidInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.md"
+        className="hidden"
+        multiple
+        onChange={(event) => handleFileUpload(event.target.files, role)}
+      />
+
       <Card
         className={`border-2 border-dashed transition-colors cursor-pointer ${
           dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-        }`}
+        } ${!selectedProjectId ? "opacity-60 cursor-not-allowed" : ""}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
-        onDrop={(e) => {
-          handleDrag(e);
-          addMockFile(setter, label);
+        onDrop={(event) => {
+          handleDrag(event);
+          if (!selectedProjectId) return;
+          handleFileUpload(event.dataTransfer.files, role);
         }}
-        onClick={() => addMockFile(setter, label)}
+        onClick={() => {
+          if (!selectedProjectId) return;
+          openPicker(role);
+        }}
       >
         <CardContent className="flex flex-col items-center justify-center py-16">
           <div className="p-4 rounded-full bg-primary/10 mb-4">
@@ -137,10 +332,17 @@ const Upload = () => {
           </div>
           <p className="text-foreground font-medium">拖拽文件至此处或点击上传</p>
           <p className="text-sm text-muted-foreground mt-1">
-            支持 PDF、Word、Excel 格式，单文件最大 50MB
+            {selectedProjectId ? `上传${title}，支持 PDF、Word、Excel、图片` : "请先选择项目后再上传文件"}
           </p>
         </CardContent>
       </Card>
+
+      {uploadMutation.isPending && (
+        <div className="text-sm text-muted-foreground flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          文件上传中...
+        </div>
+      )}
 
       {files.length > 0 && (
         <Card className="border border-border shadow-sm">
@@ -156,23 +358,39 @@ const Upload = () => {
                 <div className="flex items-center gap-3 min-w-0">
                   <FileText className="h-5 w-5 text-primary shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {file.name}
+                    <p className="text-sm font-medium text-foreground truncate">{file.originalName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {toDisplaySize(file.sizeBytes)} · {file.pageCount} 页 · {parseMethodLabel(file.parseMethod)}
                     </p>
-                    <p className="text-xs text-muted-foreground">{file.size}</p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{file.textPreview || "暂无解析摘要"}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {statusBadge(file.status)}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFile(setter, file.id);
-                    }}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  {statusBadge(file.parseStatus)}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="icon" className="h-8 w-8" disabled={deleteDocumentMutation.isPending}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>删除已上传文件？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          删除后会移除文件记录、物理文件，以及使用该文件生成的审查任务和结果。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteDocumentMutation.mutate(file.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          确认删除
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             ))}
@@ -182,77 +400,19 @@ const Upload = () => {
     </div>
   );
 
-  // Step 1: Select review type
   if (step === "select") {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">文件审查</h1>
-          <p className="text-muted-foreground mt-1">请选择您要审查的文件类型</p>
+          <p className="text-muted-foreground mt-1">请选择项目，系统将根据项目类型进入对应审查流程</p>
         </div>
 
-        <div className="max-w-xl mx-auto mt-8">
-          <Card className="border border-border shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <FileSearch className="h-5 w-5 text-primary" />
-                选择审查类型
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <RadioGroup
-                value={reviewType ?? ""}
-                onValueChange={(v) => setReviewType(v as ReviewType)}
-                className="space-y-3"
-              >
-                <label
-                  className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-                    reviewType === "bid"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <RadioGroupItem value="bid" className="mt-0.5" />
-                  <div>
-                    <p className="font-medium text-foreground">审查招标文件</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      上传招标文件，系统将自动审查其合规性、条款完整性等
-                    </p>
-                  </div>
-                </label>
-                <label
-                  className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-                    reviewType === "tender"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <RadioGroupItem value="tender" className="mt-0.5" />
-                  <div>
-                    <p className="font-medium text-foreground">审查投标文件</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      需先上传招标文件作为参照，再上传投标文件进行对比审查
-                    </p>
-                  </div>
-                </label>
-              </RadioGroup>
-
-              <Button
-                className="w-full"
-                disabled={!reviewType}
-                onClick={handleSelectType}
-              >
-                下一步
-                <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        {renderProjectSelector()}
       </div>
     );
   }
 
-  // Step 2a: Upload bid document (for bid review)
   if (step === "upload-bid") {
     return (
       <div className="space-y-6">
@@ -266,10 +426,10 @@ const Upload = () => {
           </div>
         </div>
 
+        {renderProjectSelector()}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            {renderDropZone(setBidFiles, "招标文件", bidFiles)}
-          </div>
+          <div className="lg:col-span-2">{renderDropZone("tender", "招标文件", tenderFiles)}</div>
           <div>
             <Card className="border border-border shadow-sm">
               <CardHeader className="pb-3">
@@ -286,8 +446,18 @@ const Upload = () => {
                     <li>• 关键时间节点校验</li>
                   </ul>
                 </div>
-                <Button className="w-full" disabled={!allDone(bidFiles)}>
-                  开始审查
+                <Button
+                  className="w-full"
+                  disabled={!latestTender || tenderReviewMutation.isPending}
+                  onClick={() =>
+                    latestTender &&
+                    tenderReviewMutation.mutate({
+                      projectId: selectedProjectId,
+                      tenderDocumentId: latestTender.id,
+                    })
+                  }
+                >
+                  {tenderReviewMutation.isPending ? "创建审查中..." : "开始审查"}
                 </Button>
               </CardContent>
             </Card>
@@ -297,7 +467,6 @@ const Upload = () => {
     );
   }
 
-  // Step 2b: Upload bid document first (for tender review)
   if (step === "upload-tender-bid") {
     return (
       <div className="space-y-6">
@@ -307,19 +476,17 @@ const Upload = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">审查投标文件</h1>
-            <p className="text-muted-foreground mt-1">
-              第 1 步：请先上传招标文件作为审查参照
-            </p>
+            <p className="text-muted-foreground mt-1">第 1 步：请先上传招标文件作为审查参照</p>
           </div>
           <Badge variant="outline" className="ml-auto text-xs">
             步骤 1/2
           </Badge>
         </div>
 
+        {renderProjectSelector()}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            {renderDropZone(setBidFiles, "招标文件", bidFiles)}
-          </div>
+          <div className="lg:col-span-2">{renderDropZone("tender", "招标文件", tenderFiles)}</div>
           <div>
             <Card className="border border-border shadow-sm">
               <CardHeader className="pb-3">
@@ -338,11 +505,7 @@ const Upload = () => {
                   </div>
                   <p className="text-sm text-muted-foreground">上传投标文件</p>
                 </div>
-                <Button
-                  className="w-full"
-                  disabled={!allDone(bidFiles)}
-                  onClick={() => setStep("upload-tender-tender")}
-                >
+                <Button className="w-full" disabled={!latestTender} onClick={() => setStep("upload-tender-tender")}>
                   下一步
                   <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
@@ -354,64 +517,67 @@ const Upload = () => {
     );
   }
 
-  // Step 3: Upload tender document
-  if (step === "upload-tender-tender") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={handleBack}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">审查投标文件</h1>
-            <p className="text-muted-foreground mt-1">
-              第 2 步：请上传需要审查的投标文件
-            </p>
-          </div>
-          <Badge variant="outline" className="ml-auto text-xs">
-            步骤 2/2
-          </Badge>
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={handleBack}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">审查投标文件</h1>
+          <p className="text-muted-foreground mt-1">第 2 步：请上传需要审查的投标文件</p>
         </div>
+        <Badge variant="outline" className="ml-auto text-xs">
+          步骤 2/2
+        </Badge>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            {renderDropZone(setTenderFiles, "投标文件", tenderFiles)}
-          </div>
-          <div className="space-y-4">
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">流程说明</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-success/5 border border-success/20">
-                  <div className="h-6 w-6 rounded-full bg-success text-success-foreground flex items-center justify-center text-xs font-bold shrink-0">
-                    ✓
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">招标文件已上传</p>
-                    <p className="text-xs text-muted-foreground">
-                      {bidFiles.length} 个文件
-                    </p>
-                  </div>
+      {renderProjectSelector()}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">{renderDropZone("bid", "投标文件", bidFiles)}</div>
+        <div className="space-y-4">
+          <Card className="border border-border shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">流程说明</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-success/5 border border-success/20">
+                <div className="h-6 w-6 rounded-full bg-success text-success-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                  ✓
                 </div>
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
-                    2
-                  </div>
-                  <p className="text-sm font-medium text-foreground">上传投标文件</p>
+                <div>
+                  <p className="text-sm font-medium text-foreground">招标文件已上传</p>
+                  <p className="text-xs text-muted-foreground">{tenderFiles.length} 个文件</p>
                 </div>
-                <Button className="w-full" disabled={!allDone(tenderFiles)}>
-                  开始审查
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                  2
+                </div>
+                <p className="text-sm font-medium text-foreground">上传投标文件</p>
+              </div>
+              <Button
+                className="w-full"
+                disabled={!latestTender || !latestBid || bidReviewMutation.isPending}
+                onClick={() =>
+                  latestTender &&
+                  latestBid &&
+                  bidReviewMutation.mutate({
+                    projectId: selectedProjectId,
+                    tenderDocumentId: latestTender.id,
+                    bidDocumentId: latestBid.id,
+                  })
+                }
+              >
+                {bidReviewMutation.isPending ? "创建审查中..." : "开始审查"}
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 };
 
 export default Upload;
