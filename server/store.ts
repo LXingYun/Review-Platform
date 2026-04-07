@@ -51,17 +51,6 @@ const readData = (): AppData => {
     reviewStage: finding.reviewStage ?? "chapter_review",
   }));
 
-  parsed.reviewTasks = parsed.reviewTasks.map((task) => {
-    const { formalReportHtml: _formalReportHtml, chapterSummaries: _chapterSummaries, ...nextTask } = task as typeof task & {
-      formalReportHtml?: unknown;
-      chapterSummaries?: unknown;
-    };
-
-    return {
-      ...nextTask,
-    };
-  });
-
   return parsed;
 };
 

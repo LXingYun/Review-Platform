@@ -3,6 +3,7 @@ import { FindingStatus, ReviewScenario } from "../types";
 
 const mapDocumentChunkById = () => {
   const data = store.get();
+
   const documentChunkMap = new Map(
     data.documents.flatMap((document) =>
       document.chunks.map((chunk) => [

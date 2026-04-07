@@ -1,16 +1,13 @@
 # Backend API
 
-这个目录补上了当前前端原型缺失的 MVP 后端能力，目标是先让项目具备真实接口，而不是继续完全依赖 mock 数据。
+当前后端为本地可运行的 MVP 服务，负责：
 
-当前实现包含：
-
-- 项目管理接口
-- 文档上传接口
-- 两类审查任务接口
-- 审查结果查询与复核接口
-- 法规管理接口
-- 仪表盘统计接口
-- 可选的 AI 审查执行层（未配置时自动回退到本地规则）
+- 项目管理
+- 文档上传与解析
+- 审查任务创建与执行
+- 问题结果查询与复核
+- 法规管理
+- 仪表盘统计
 
 ## 运行
 
@@ -21,41 +18,61 @@ npm run server:dev
 
 默认端口：`8787`
 
-## AI 配置
+## AI 约束
 
-如果你要启用 AI 审查，需要配置这些环境变量：
+当前审查流程强依赖 AI。
+
+需要配置：
 
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL` 可选，默认 `https://api.openai.com/v1`
 - `OPENAI_MODEL` 可选，默认 `gpt-4o-mini`
 
-未配置 `OPENAI_API_KEY` 时，系统会继续使用当前本地规则和候选匹配逻辑，不会阻塞开发。
+如果缺少 `OPENAI_API_KEY`，创建审查任务会直接报错，不会回退到本地规则或候选匹配逻辑。
 
-项目当前已支持 OpenAI 兼容接口，例如 DeepSeek：
+OpenAI 兼容接口示例（DeepSeek）：
 
-- `OPENAI_BASE_URL=https://api.deepseek.com`
-- `OPENAI_MODEL=deepseek-chat`
+```env
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=deepseek-chat
+```
 
 ## 数据存储
 
-- JSON 数据：`server-data/app-data.json`
-- 上传文件：`storage/uploads/`
+- `server-data/app-data.json`：项目、文档、任务、问题、法规等业务数据
+- `storage/uploads/`：上传后的原始文件
 
-这是一个刻意保持简单的本地文件实现，方便你先把前端接起来。
-后面如果要上生产，可以把 `server/store.ts` 和各个 `services` 平滑替换为 PostgreSQL / ORM 实现。
+这是一个刻意保持简单的本地文件实现，方便前后端联调。  
+如果后续上生产，可将 `server/store.ts` 和各 `services` 替换为数据库与 ORM 实现。
 
-## 主要接口
+## 当前接口
 
 - `GET /api/health`
 - `GET /api/dashboard`
 - `GET /api/projects`
 - `POST /api/projects`
+- `DELETE /api/projects/:projectId`
 - `GET /api/documents`
 - `POST /api/documents/upload`
+- `DELETE /api/documents/:documentId`
 - `GET /api/review-tasks`
+- `DELETE /api/review-tasks/:taskId`
 - `POST /api/reviews/tender-compliance`
 - `POST /api/reviews/bid-consistency`
 - `GET /api/findings`
 - `PATCH /api/findings/:findingId/status`
 - `GET /api/regulations`
 - `POST /api/regulations`
+- `PUT /api/regulations/:regulationId`
+- `POST /api/regulations/upload`
+- `POST /api/regulations/upload/preview`
+- `DELETE /api/regulations/:regulationId`
+
+## 当前结果查看方式
+
+“审查结果”已经不再是独立页面。  
+问题结果统一通过任务详情页消费，对应前端会使用：
+
+- `GET /api/review-tasks`
+- `GET /api/findings?projectId=...&scenario=...`
+- `PATCH /api/findings/:findingId/status`
