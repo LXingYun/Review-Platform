@@ -2,7 +2,6 @@ import { store } from "../store";
 import { Finding, ReviewScenario, ReviewTask } from "../types";
 import { getAiConfig } from "./ai-config-service";
 import { generateAiScenarioFindings } from "./ai-review-service";
-import { generateTaskFormalReport } from "./finding-service";
 import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
 import { createId, nowIso, summarizeRisk } from "../utils";
 
@@ -122,7 +121,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
           ? {
               ...item,
               status: "已完成",
-              stageLabel: "正在生成正式报告",
+              stageLabel: "审查完成",
               chapterSummaries,
               progress: 100,
               riskLevel,
@@ -133,21 +132,6 @@ const runReviewTaskInBackground = async (taskId: string) => {
       findings: [...current.findings.filter((item) => item.taskId !== taskId), ...findings],
       projects: current.projects.map((item) =>
         item.id === project.id ? { ...item, status: "进行中" } : item,
-      ),
-    }));
-
-    const formalReportHtml = await generateTaskFormalReport(taskId).catch(() => null);
-
-    store.update((current) => ({
-      ...current,
-      reviewTasks: current.reviewTasks.map((item) =>
-        item.id === taskId
-          ? {
-              ...item,
-              formalReportHtml,
-              stageLabel: "审查完成",
-            }
-          : item,
       ),
     }));
   } catch (error) {

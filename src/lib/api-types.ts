@@ -94,6 +94,7 @@ export type ReviewTaskDetailItem = ReviewTaskItem;
 
 export interface FindingListItem {
   id: string;
+  taskId: string;
   title: string;
   project: string;
   risk: "高" | "中" | "低";

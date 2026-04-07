@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +9,6 @@ import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import TaskDetail from "./pages/TaskDetail";
 import Upload from "./pages/Upload";
-import Results from "./pages/Results";
 import Regulations from "./pages/Regulations";
 import NotFound from "./pages/NotFound";
 
@@ -28,7 +27,7 @@ const App = () => (
             <Route path="/projects/:projectId" element={<ProjectDetail />} />
             <Route path="/tasks/:taskId" element={<TaskDetail />} />
             <Route path="/upload" element={<Upload />} />
-            <Route path="/results" element={<Results />} />
+            <Route path="/results" element={<Navigate to="/projects" replace />} />
             <Route path="/regulations" element={<Regulations />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

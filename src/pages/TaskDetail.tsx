@@ -1,23 +1,26 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileSearch, Trash2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Search,
+  Trash2,
+  XCircle,
+} from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { API_BASE_URL, apiRequest } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { apiRequest } from "@/lib/api";
 import { DocumentItem, FindingListItem, ReviewTaskDetailItem } from "@/lib/api-types";
 
 const riskBadge = (risk: string) => {
@@ -26,17 +29,57 @@ const riskBadge = (risk: string) => {
   return "outline" as const;
 };
 
+const riskIcon = (risk: string) => {
+  if (risk === "高") return <XCircle className="h-5 w-5 text-destructive" />;
+  if (risk === "中") return <AlertTriangle className="h-5 w-5 text-warning" />;
+  return <CheckCircle2 className="h-5 w-5 text-success" />;
+};
+
+const reviewStageLabel = (stage: FindingListItem["reviewStage"]) => {
+  if (stage === "cross_section_review") return "跨章节冲突";
+  if (stage === "response_consistency_review") return "响应一致性";
+  return "章节审查";
+};
+
 const parseMethodLabel = (parseMethod: DocumentItem["parseMethod"]) => {
   if (parseMethod === "pdf-text") return "PDF文本";
   if (parseMethod === "plain-text") return "纯文本";
-  if (parseMethod === "image-ocr") return "图片OCR";
+  if (parseMethod === "image-ocr") return "图片 OCR";
   return "占位解析";
+};
+
+const ChunkGroup = ({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ label: string; text: string }>;
+}) => {
+  if (items.length === 0) return null;
+
+  return (
+    <div>
+      <Label className="text-xs text-muted-foreground">{title}</Label>
+      <div className="mt-2 space-y-2">
+        {items.map((item) => (
+          <div key={`${title}-${item.label}-${item.text}`} className="rounded-lg border border-border bg-muted/50 p-3">
+            <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
+            <p className="mt-1 text-sm text-foreground">{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 const TaskDetail = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { taskId = "" } = useParams();
+  const [search, setSearch] = useState("");
+  const [selectedIssue, setSelectedIssue] = useState<FindingListItem | null>(null);
+  const [humanReviewFilter, setHumanReviewFilter] = useState<"all" | "needs_review" | "no_review">("all");
+  const [confidenceFilter, setConfidenceFilter] = useState<"all" | "ge_80" | "ge_60" | "lt_60">("all");
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ["review-tasks", "all"],
@@ -58,6 +101,7 @@ const TaskDetail = () => {
       const projectFindings = await apiRequest<FindingListItem[]>(
         `/findings?projectId=${encodeURIComponent(task!.projectId)}&scenario=${task!.scenario}`,
       );
+
       return projectFindings.filter((finding) => finding.taskId === taskId);
     },
     enabled: Boolean(task?.projectId && task?.scenario),
@@ -69,10 +113,45 @@ const TaskDetail = () => {
     return documents.filter((document) => task.documentIds.includes(document.id));
   }, [documents, task]);
 
-  const crossSectionFindings = useMemo(
-    () => findings.filter((finding) => finding.reviewStage === "cross_section_review"),
-    [findings],
-  );
+  const filteredFindings = useMemo(() => {
+    return findings.filter((finding) => {
+      if (search.trim()) {
+        const keyword = search.trim();
+        const matched =
+          finding.title.includes(keyword) ||
+          finding.description.includes(keyword) ||
+          finding.location.includes(keyword) ||
+          finding.category.includes(keyword);
+
+        if (!matched) return false;
+      }
+
+      if (humanReviewFilter === "needs_review" && !finding.needsHumanReview) return false;
+      if (humanReviewFilter === "no_review" && finding.needsHumanReview) return false;
+
+      if (confidenceFilter === "ge_80" && finding.confidence < 0.8) return false;
+      if (confidenceFilter === "ge_60" && finding.confidence < 0.6) return false;
+      if (confidenceFilter === "lt_60" && finding.confidence >= 0.6) return false;
+
+      return true;
+    });
+  }, [confidenceFilter, findings, humanReviewFilter, search]);
+
+  const highCount = filteredFindings.filter((finding) => finding.risk === "高").length;
+  const midCount = filteredFindings.filter((finding) => finding.risk === "中").length;
+  const lowCount = filteredFindings.filter((finding) => finding.risk === "低").length;
+
+  const updateFindingMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "待复核" | "已确认" | "已忽略" }) =>
+      apiRequest<FindingListItem>(`/findings/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => {
+      setSelectedIssue(null);
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+    },
+  });
 
   const deleteTaskMutation = useMutation({
     mutationFn: () =>
@@ -96,6 +175,32 @@ const TaskDetail = () => {
     return <p className="text-sm text-destructive">未找到该任务。</p>;
   }
 
+  const renderIssueRow = (finding: FindingListItem) => (
+    <div
+      key={finding.id}
+      className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-muted/50"
+      onClick={() => setSelectedIssue(finding)}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex w-8 shrink-0 items-center justify-center self-stretch">
+          {riskIcon(finding.risk)}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{finding.title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{finding.location}</p>
+        </div>
+      </div>
+      <div className="ml-4 flex items-center gap-2">
+        <Badge variant="outline">{reviewStageLabel(finding.reviewStage)}</Badge>
+        <Badge variant={riskBadge(finding.risk)}>{finding.risk}风险</Badge>
+        {finding.needsHumanReview && <Badge variant="outline">需复核</Badge>}
+        <Badge variant="outline" className="text-xs">
+          {finding.status}
+        </Badge>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -107,58 +212,46 @@ const TaskDetail = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">{task.name}</h1>
-            <p className="text-muted-foreground mt-1">任务详情、关联文件与问题结果</p>
+            <p className="mt-1 text-muted-foreground">任务详情、关联文件与问题清单</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={deleteTaskMutation.isPending}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                删除任务
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>删除审查任务？</AlertDialogTitle>
-                <AlertDialogDescription>
-                  删除后会同步移除该任务对应的问题结果，但不会删除原始上传文件。
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => deleteTaskMutation.mutate()}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  确认删除
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Button onClick={() => navigate(`/results?projectId=${encodeURIComponent(task.projectId)}&scenario=${task.scenario}&taskId=${task.id}`)}>
-            <FileSearch className="h-4 w-4 mr-2" />
-            查看结果页
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => window.open(`${API_BASE_URL}/review-tasks/${task.id}/formal-report`, "_blank", "noopener,noreferrer")}
-            disabled={!task.formalReportHtml}
-          >
-            查看报告
-          </Button>
-        </div>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline" disabled={deleteTaskMutation.isPending}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              删除任务
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>删除审查任务？</AlertDialogTitle>
+              <AlertDialogDescription>
+                删除后会同步移除该任务对应的问题结果，但不会删除原始上传文件。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteTaskMutation.mutate()}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                确认删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="border border-border shadow-sm lg:col-span-2">
-          <CardContent className="p-5 space-y-3">
+          <CardContent className="space-y-3 p-5">
             <div className="flex items-center gap-2">
               <Badge variant="outline">{task.projectName}</Badge>
               <Badge variant="outline">{task.scenario === "tender_compliance" ? "招标审查" : "投标审查"}</Badge>
               <Badge variant={riskBadge(task.riskLevel)}>{task.riskLevel}风险</Badge>
             </div>
-            <div className="text-sm text-muted-foreground space-y-1">
+            <div className="space-y-1 text-sm text-muted-foreground">
               <p>任务状态：{task.status}</p>
               <p>当前阶段：{task.stageLabel}</p>
               <p>创建时间：{task.createdAt.slice(0, 10)}</p>
@@ -173,7 +266,7 @@ const TaskDetail = () => {
 
         <Card className="border border-border shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">统计</CardTitle>
+            <CardTitle className="text-base">概况</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex justify-between">
@@ -188,105 +281,254 @@ const TaskDetail = () => {
         </Card>
       </div>
 
-      <div className="space-y-6">
-        <Card className="border border-border shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">关联文件</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {documentsLoading && <p className="text-sm text-muted-foreground">文件加载中...</p>}
-            {!documentsLoading && relatedDocuments.length === 0 && <p className="text-sm text-muted-foreground">当前任务没有关联文件。</p>}
-            {relatedDocuments.map((document) => (
-              <div key={document.id} className="rounded-lg border border-border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{document.originalName}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {document.role} · {document.pageCount} 页 · {parseMethodLabel(document.parseMethod)}
-                    </p>
-                  </div>
-                  <Badge variant="outline">{document.parseStatus}</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-3 rounded-lg bg-muted p-3">
-                  {document.textPreview || "暂无解析摘要"}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">问题摘要</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {findingsLoading && <p className="text-sm text-muted-foreground">问题加载中...</p>}
-            {!findingsLoading && findings.length === 0 && <p className="text-sm text-muted-foreground">当前任务暂无问题结果。</p>}
-            {findings.map((finding) => (
-              <div key={finding.id} className="rounded-lg border border-border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{finding.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{finding.location}</p>
-                  </div>
-                  <Badge variant={riskBadge(finding.risk)}>{finding.risk}风险</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground mt-3">{finding.description}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="border border-border shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">章节审查摘要</CardTitle>
+          <CardTitle className="text-base">关联文件</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {task.chapterSummaries.length === 0 && <p className="text-sm text-muted-foreground">当前任务暂无章节摘要。</p>}
-          {task.chapterSummaries.length > 0 && (
-            <div className="rounded-lg bg-muted p-3">
-              <p className="text-xs text-muted-foreground">识别出的章节清单</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {task.chapterSummaries.map((chapter) => (
-                  <Badge key={`chapter-list-${chapter.title}`} variant="outline">
-                    {chapter.title} · {chapter.pageRange}
-                  </Badge>
-                ))}
-              </div>
-            </div>
+          {documentsLoading && <p className="text-sm text-muted-foreground">文件加载中...</p>}
+          {!documentsLoading && relatedDocuments.length === 0 && (
+            <p className="text-sm text-muted-foreground">当前任务没有关联文件。</p>
           )}
-          {task.chapterSummaries.map((chapter) => (
-            <div key={chapter.title} className="rounded-lg border border-border p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-foreground">{chapter.title}</p>
-                <Badge variant="outline">{chapter.issueCount} 个问题</Badge>
+
+          {relatedDocuments.map((document) => (
+            <div key={document.id} className="rounded-lg border border-border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{document.originalName}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {document.role} · {document.pageCount} 页 · {parseMethodLabel(document.parseMethod)}
+                  </p>
+                </div>
+                <Badge variant="outline">{document.parseStatus}</Badge>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">{chapter.pageRange}</p>
-              <p className="text-sm text-muted-foreground mt-2">{chapter.summary || "暂无章节摘要"}</p>
+              <p className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                {document.textPreview || "暂无解析摘要"}
+              </p>
             </div>
           ))}
         </CardContent>
       </Card>
 
       <Card className="border border-border shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">跨章节冲突摘要</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {crossSectionFindings.length === 0 && <p className="text-sm text-muted-foreground">当前任务暂无跨章节冲突。</p>}
-          {crossSectionFindings.map((finding) => (
-            <div key={finding.id} className="rounded-lg border border-border p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-foreground">{finding.title}</p>
-                <Badge variant={riskBadge(finding.risk)}>{finding.risk}风险</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">{finding.location}</p>
-              <p className="text-sm text-muted-foreground mt-2">{finding.description}</p>
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <CardTitle className="text-base">问题清单</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">在任务详情页内直接查看、筛选和复核当前任务的问题结果。</p>
             </div>
-          ))}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Card className="border-destructive/20 bg-destructive/5 shadow-none">
+              <CardContent className="flex items-center gap-3 p-4">
+                <XCircle className="h-8 w-8 text-destructive" />
+                <div>
+                  <p className="text-2xl font-bold text-destructive">{highCount}</p>
+                  <p className="text-sm text-muted-foreground">高风险</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-warning/20 bg-warning/5 shadow-none">
+              <CardContent className="flex items-center gap-3 p-4">
+                <AlertTriangle className="h-8 w-8 text-warning" />
+                <div>
+                  <p className="text-2xl font-bold text-warning">{midCount}</p>
+                  <p className="text-sm text-muted-foreground">中风险</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-success/20 bg-success/5 shadow-none">
+              <CardContent className="flex items-center gap-3 p-4">
+                <CheckCircle2 className="h-8 w-8 text-success" />
+                <div>
+                  <p className="text-2xl font-bold text-success">{lowCount}</p>
+                  <p className="text-sm text-muted-foreground">低风险</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="搜索问题..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <Select value={humanReviewFilter} onValueChange={(value) => setHumanReviewFilter(value as typeof humanReviewFilter)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="人工复核筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部复核状态</SelectItem>
+                <SelectItem value="needs_review">仅需人工复核</SelectItem>
+                <SelectItem value="no_review">仅无需人工复核</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={confidenceFilter} onValueChange={(value) => setConfidenceFilter(value as typeof confidenceFilter)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="置信度筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部置信度</SelectItem>
+                <SelectItem value="ge_80">80%以上</SelectItem>
+                <SelectItem value="ge_60">60%以上</SelectItem>
+                <SelectItem value="lt_60">60%以下</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Tabs defaultValue="all">
+            <TabsList>
+              <TabsTrigger value="all">全部 ({filteredFindings.length})</TabsTrigger>
+              <TabsTrigger value="cross">跨章节冲突</TabsTrigger>
+              <TabsTrigger value="pending">待复核</TabsTrigger>
+              <TabsTrigger value="confirmed">已确认</TabsTrigger>
+              <TabsTrigger value="ignored">已忽略</TabsTrigger>
+            </TabsList>
+
+            {["all", "cross", "pending", "confirmed", "ignored"].map((tab) => {
+              const statusMap: Record<string, string | null> = {
+                all: null,
+                cross: null,
+                pending: "待复核",
+                confirmed: "已确认",
+                ignored: "已忽略",
+              };
+
+              const tabFiltered = filteredFindings.filter((finding) => {
+                if (tab === "cross" && finding.reviewStage !== "cross_section_review") return false;
+                return !statusMap[tab] || finding.status === statusMap[tab];
+              });
+
+              return (
+                <TabsContent key={tab} value={tab} className="mt-4">
+                  {findingsLoading ? (
+                    <p className="p-4 text-sm text-muted-foreground">问题加载中...</p>
+                  ) : tabFiltered.length === 0 ? (
+                    <p className="p-4 text-sm text-muted-foreground">当前筛选条件下暂无问题。</p>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-border">
+                      <div className="divide-y divide-border">{tabFiltered.map(renderIssueRow)}</div>
+                    </div>
+                  )}
+                </TabsContent>
+              );
+            })}
+          </Tabs>
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedIssue} onOpenChange={() => setSelectedIssue(null)}>
+        <DialogContent className="max-w-4xl">
+          {selectedIssue && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {riskIcon(selectedIssue.risk)}
+                  {selectedIssue.title}
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{reviewStageLabel(selectedIssue.reviewStage)}</Badge>
+                  <Badge variant={riskBadge(selectedIssue.risk)}>{selectedIssue.risk}风险</Badge>
+                  <Badge variant="outline">{selectedIssue.category}</Badge>
+                  <Badge variant="outline">{selectedIssue.status}</Badge>
+                  <Badge variant="outline">置信度 {Math.round(selectedIssue.confidence * 100)}%</Badge>
+                  {selectedIssue.needsHumanReview && <Badge variant="outline">建议人工复核</Badge>}
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">原文定位</Label>
+                  <p className="mt-1 rounded-lg bg-muted p-3 text-sm">
+                    {selectedIssue.location} - {selectedIssue.project}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">问题描述</Label>
+                  <p className="mt-1 text-sm text-foreground">{selectedIssue.description}</p>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">处理建议</Label>
+                  <p className="mt-1 text-sm text-foreground">{selectedIssue.recommendation}</p>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">引用依据</Label>
+                  <div className="mt-2 space-y-2">
+                    {selectedIssue.references.map((reference) => (
+                      <p key={reference} className="rounded-lg bg-muted px-3 py-2 text-sm">
+                        {reference}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                <ChunkGroup
+                  title="招标原文片段"
+                  items={selectedIssue.sourceChunks.map((chunk) => ({
+                    label: `${chunk.documentName} · 片段 ${chunk.order}`,
+                    text: chunk.text,
+                  }))}
+                />
+
+                <ChunkGroup
+                  title="投标响应片段"
+                  items={selectedIssue.candidateChunks.map((chunk) => ({
+                    label: `${chunk.documentName} · 片段 ${chunk.order}`,
+                    text: chunk.text,
+                  }))}
+                />
+
+                <ChunkGroup
+                  title="法规依据片段"
+                  items={selectedIssue.regulationChunks.map((chunk) => ({
+                    label: `${chunk.regulationName} [${chunk.regulationCategory}]${chunk.sectionTitle ? ` · ${chunk.sectionTitle}` : ""} · 条款片段 ${chunk.order}`,
+                    text: chunk.text,
+                  }))}
+                />
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">复核备注</Label>
+                  <Textarea placeholder="输入复核意见..." className="mt-1" />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    disabled={updateFindingMutation.isPending}
+                    onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已确认" })}
+                  >
+                    <CheckCircle2 className="mr-1 h-4 w-4" />
+                    确认问题
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    disabled={updateFindingMutation.isPending}
+                    onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已忽略" })}
+                  >
+                    忽略
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
