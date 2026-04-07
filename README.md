@@ -31,6 +31,12 @@ npm run server:dev
 npm run dev
 ```
 
+## 包管理说明
+
+- 仓库统一使用 `npm`
+- 请使用 `package-lock.json` 作为唯一锁文件
+- 不再维护 Bun 锁文件，也不要混用 `bun install`
+
 前端默认地址：`http://localhost:8080`  
 后端默认地址：`http://localhost:8787`
 
