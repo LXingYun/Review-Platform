@@ -4,7 +4,19 @@ import { getAiConfig } from "./ai-config-service";
 import { generateAiScenarioFindings } from "./ai-review-service";
 import { generateTaskFormalReport } from "./finding-service";
 import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
-import { createId, generateScenarioFindings, nowIso, summarizeRisk } from "../utils";
+import { createId, nowIso, summarizeRisk } from "../utils";
+
+export const resolveReviewExecutionMode = (params: {
+  aiEnabled: boolean;
+}) => (params.aiEnabled ? "ai" : "blocked");
+
+const getReviewFailureMessage = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return "AI 审查失败";
+  }
+
+  return error.message.trim() || "AI 审查失败";
+};
 
 const runReviewTaskInBackground = async (taskId: string) => {
   const startedAt = Date.now();
@@ -30,136 +42,128 @@ const runReviewTaskInBackground = async (taskId: string) => {
 
   await new Promise((resolve) => setTimeout(resolve, 1500));
 
-  const latest = store.get();
-  const aiConfig = getAiConfig();
-  const canRunAiForScenario =
-    aiConfig.enabled &&
-    (task.scenario !== "tender_compliance" || latest.regulations.length > 0);
+  try {
+    const latest = store.get();
+    const aiConfig = getAiConfig();
+    const reviewExecutionMode = resolveReviewExecutionMode({
+      aiEnabled: aiConfig.enabled,
+    });
 
-  let findings: Finding[] = [];
-  let chapterSummaries: ReviewTask["chapterSummaries"] = [];
+    if (reviewExecutionMode !== "ai") {
+      throw new Error("AI review requires OPENAI_API_KEY");
+    }
 
-  if (canRunAiForScenario && task.scenario === "tender_compliance") {
-    store.update((current) => ({
-      ...current,
-      reviewTasks: current.reviewTasks.map((item) =>
-        item.id === taskId ? { ...item, stageLabel: "进行章节级合规审查", progress: 45 } : item,
-      ),
-    }));
+    let findings: Finding[] = [];
+    let chapterSummaries: ReviewTask["chapterSummaries"] = [];
 
-    const tenderResult: { findings: Finding[]; chapterSummaries: ReviewTask["chapterSummaries"] } = await generateTenderChapterAiFindings({
-      projectId: project.id,
-      taskId,
-      tenderDocument: taskDocuments.find((document) => document.role === "tender") ?? taskDocuments[0],
-      regulations: latest.regulations,
-      onProgress: ({ current, total, chapterTitle, stage }) => {
-        store.update((currentState) => ({
-          ...currentState,
-          reviewTasks: currentState.reviewTasks.map((item) =>
-            item.id === taskId
-              ? {
-                  ...item,
-                  stageLabel:
-                    stage === "chapter_review"
-                      ? `正在审查第 ${current}/${total} 章：${chapterTitle}`
-                      : "正在进行跨章节一致性检查",
-                  progress: stage === "chapter_review" ? 35 + Math.floor((current / total) * 35) : 78,
-                }
-              : item,
-          ),
-        }));
-      },
-    }).catch((): { findings: Finding[]; chapterSummaries: ReviewTask["chapterSummaries"] } =>
-      ({
-        findings: generateScenarioFindings(
-          task.scenario,
-          project.id,
-          taskId,
-          taskDocuments,
-          latest.regulations,
+    if (task.scenario === "tender_compliance") {
+      store.update((current) => ({
+        ...current,
+        reviewTasks: current.reviewTasks.map((item) =>
+          item.id === taskId ? { ...item, stageLabel: "进行章节级合规审查", progress: 45 } : item,
         ),
-        chapterSummaries: [],
-      }),
-    );
+      }));
 
-    findings = tenderResult.findings;
-    chapterSummaries = tenderResult.chapterSummaries;
-  } else if (canRunAiForScenario) {
-    findings = await generateAiScenarioFindings({
-      scenario: task.scenario,
-      projectId: project.id,
-      taskId,
-      documents: taskDocuments,
-      regulations: latest.regulations,
-    }).catch(() =>
-      generateScenarioFindings(
-        task.scenario,
-        project.id,
+      const tenderResult: { findings: Finding[]; chapterSummaries: ReviewTask["chapterSummaries"] } = await generateTenderChapterAiFindings({
+        projectId: project.id,
         taskId,
-        taskDocuments,
-        latest.regulations,
-      ),
-    );
-  } else {
-    findings = generateScenarioFindings(
-      task.scenario,
-      project.id,
-      taskId,
-      taskDocuments,
-      latest.regulations,
-    );
-  }
+        tenderDocument: taskDocuments.find((document) => document.role === "tender") ?? taskDocuments[0],
+        regulations: latest.regulations,
+        onProgress: ({ current, total, chapterTitle, stage }) => {
+          store.update((currentState) => ({
+            ...currentState,
+            reviewTasks: currentState.reviewTasks.map((item) =>
+              item.id === taskId
+                ? {
+                    ...item,
+                    stageLabel:
+                      stage === "chapter_review"
+                        ? `正在审查第 ${current}/${total} 章：${chapterTitle}`
+                        : "正在进行跨章节一致性检查",
+                    progress: stage === "chapter_review" ? 35 + Math.floor((current / total) * 35) : 78,
+                  }
+                : item,
+            ),
+          }));
+        },
+      });
 
-  const riskLevel = summarizeRisk(findings.map((finding) => finding.risk));
+      findings = tenderResult.findings;
+      chapterSummaries = tenderResult.chapterSummaries;
+    } else {
+      findings = await generateAiScenarioFindings({
+        scenario: task.scenario,
+        projectId: project.id,
+        taskId,
+        documents: taskDocuments,
+        regulations: latest.regulations,
+      });
+    }
 
-  const elapsed = Date.now() - startedAt;
-  const minimumVisibleDuration = 4500;
-  if (elapsed < minimumVisibleDuration) {
+    const riskLevel = summarizeRisk(findings.map((finding) => finding.risk));
+
+    const elapsed = Date.now() - startedAt;
+    const minimumVisibleDuration = 4500;
+    if (elapsed < minimumVisibleDuration) {
+      store.update((current) => ({
+        ...current,
+        reviewTasks: current.reviewTasks.map((item) =>
+          item.id === taskId ? { ...item, status: "进行中", stageLabel: "整合审查结果", progress: 80 } : item,
+        ),
+      }));
+
+      await new Promise((resolve) => setTimeout(resolve, minimumVisibleDuration - elapsed));
+    }
+
     store.update((current) => ({
       ...current,
       reviewTasks: current.reviewTasks.map((item) =>
-        item.id === taskId ? { ...item, status: "进行中", stageLabel: "整合审查结果", progress: 80 } : item,
+            item.id === taskId
+          ? {
+              ...item,
+              status: "已完成",
+              stageLabel: "正在生成正式报告",
+              chapterSummaries,
+              progress: 100,
+              riskLevel,
+              completedAt: nowIso(),
+            }
+          : item,
+      ),
+      findings: [...current.findings.filter((item) => item.taskId !== taskId), ...findings],
+      projects: current.projects.map((item) =>
+        item.id === project.id ? { ...item, status: "进行中" } : item,
       ),
     }));
 
-    await new Promise((resolve) => setTimeout(resolve, minimumVisibleDuration - elapsed));
+    const formalReportHtml = await generateTaskFormalReport(taskId).catch(() => null);
+
+    store.update((current) => ({
+      ...current,
+      reviewTasks: current.reviewTasks.map((item) =>
+        item.id === taskId
+          ? {
+              ...item,
+              formalReportHtml,
+              stageLabel: "审查完成",
+            }
+          : item,
+      ),
+    }));
+  } catch (error) {
+    store.update((current) => ({
+      ...current,
+      reviewTasks: current.reviewTasks.map((item) =>
+        item.id === taskId
+          ? {
+              ...item,
+              status: "失败",
+              stageLabel: getReviewFailureMessage(error),
+            }
+          : item,
+      ),
+    }));
   }
-
-  store.update((current) => ({
-    ...current,
-    reviewTasks: current.reviewTasks.map((item) =>
-          item.id === taskId
-        ? {
-            ...item,
-            status: "已完成",
-            stageLabel: "正在生成正式报告",
-            chapterSummaries,
-            progress: 100,
-            riskLevel,
-            completedAt: nowIso(),
-          }
-        : item,
-    ),
-    findings: [...current.findings.filter((item) => item.taskId !== taskId), ...findings],
-    projects: current.projects.map((item) =>
-      item.id === project.id ? { ...item, status: "进行中" } : item,
-    ),
-  }));
-
-  const formalReportHtml = await generateTaskFormalReport(taskId).catch(() => null);
-
-  store.update((current) => ({
-    ...current,
-    reviewTasks: current.reviewTasks.map((item) =>
-      item.id === taskId
-        ? {
-            ...item,
-            formalReportHtml,
-            stageLabel: "审查完成",
-          }
-        : item,
-    ),
-  }));
 };
 
 export const listTasks = (projectId?: string) => {
@@ -183,6 +187,11 @@ export const createReviewTask = async (params: {
   scenario: ReviewScenario;
   documentIds: string[];
 }) => {
+  const aiConfig = getAiConfig();
+  if (!aiConfig.enabled) {
+    throw new Error("AI review requires OPENAI_API_KEY");
+  }
+
   const data = store.get();
   const project = data.projects.find((item) => item.id === params.projectId);
 

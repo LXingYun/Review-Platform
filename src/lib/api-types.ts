@@ -29,7 +29,7 @@ export interface ProjectListItem {
   date: string;
 }
 
-export interface ProjectDetailItem extends ProjectListItem {}
+export type ProjectDetailItem = ProjectListItem;
 
 export interface DocumentItem {
   id: string;
@@ -90,7 +90,7 @@ export interface ReviewTaskItem {
   completedAt: string | null;
 }
 
-export interface ReviewTaskDetailItem extends ReviewTaskItem {}
+export type ReviewTaskDetailItem = ReviewTaskItem;
 
 export interface FindingListItem {
   id: string;
