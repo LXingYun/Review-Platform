@@ -4,7 +4,7 @@ import multer from "multer";
 import { ZodError } from "zod";
 import { getDashboardSummary } from "./services/dashboard-service";
 import { saveUploadedDocument, listDocuments, deleteDocument } from "./services/document-service";
-import { exportFindingsFormalHtmlReport, exportFindingsHtmlReport, exportFindingsReport, generateTaskFormalReport, getTaskFormalReport, listFindings, updateFindingStatus } from "./services/finding-service";
+import { listFindings, updateFindingStatus } from "./services/finding-service";
 import { createProject, deleteProject, listProjects } from "./services/project-service";
 import { createRegulation, deleteRegulation, importRegulationFromFile, listRegulations, previewRegulationFromFile, updateRegulation } from "./services/regulation-service";
 import { createReviewTask, deleteReviewTask, listTasks } from "./services/review-service";
@@ -112,55 +112,6 @@ export const createApp = () => {
         scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
       }),
     );
-  });
-
-  app.get("/api/findings/export", (req, res) => {
-    const content = exportFindingsReport({
-      search: req.query.search ? String(req.query.search) : undefined,
-      status: req.query.status ? (String(req.query.status) as never) : undefined,
-      projectId: req.query.projectId ? String(req.query.projectId) : undefined,
-      scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
-    });
-
-    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
-    res.setHeader("Content-Disposition", 'attachment; filename="review-report.md"');
-    res.send(content);
-  });
-
-  app.get("/api/findings/export/html", (req, res) => {
-    const content = exportFindingsHtmlReport({
-      search: req.query.search ? String(req.query.search) : undefined,
-      status: req.query.status ? (String(req.query.status) as never) : undefined,
-      projectId: req.query.projectId ? String(req.query.projectId) : undefined,
-      scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
-    });
-
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(content);
-  });
-
-  app.get("/api/findings/export/formal-html", async (req, res) => {
-    const content = await exportFindingsFormalHtmlReport({
-      search: req.query.search ? String(req.query.search) : undefined,
-      status: req.query.status ? (String(req.query.status) as never) : undefined,
-      projectId: req.query.projectId ? String(req.query.projectId) : undefined,
-      scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
-    });
-
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(content);
-  });
-
-  app.post("/api/review-tasks/:taskId/formal-report", async (req, res) => {
-    const content = await generateTaskFormalReport(req.params.taskId);
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(content);
-  });
-
-  app.get("/api/review-tasks/:taskId/formal-report", (req, res) => {
-    const content = getTaskFormalReport(req.params.taskId);
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(content);
   });
 
   app.patch("/api/findings/:findingId/status", (req, res) => {

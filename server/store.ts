@@ -51,14 +51,16 @@ const readData = (): AppData => {
     reviewStage: finding.reviewStage ?? "chapter_review",
   }));
 
-  parsed.reviewTasks = parsed.reviewTasks.map((task) => ({
-    ...task,
-    formalReportHtml: task.formalReportHtml ?? null,
-    chapterSummaries: (task.chapterSummaries ?? []).map((chapter) => ({
-      ...chapter,
-      pageRange: chapter.pageRange ?? "页码未知",
-    })),
-  }));
+  parsed.reviewTasks = parsed.reviewTasks.map((task) => {
+    const { formalReportHtml: _formalReportHtml, chapterSummaries: _chapterSummaries, ...nextTask } = task as typeof task & {
+      formalReportHtml?: unknown;
+      chapterSummaries?: unknown;
+    };
+
+    return {
+      ...nextTask,
+    };
+  });
 
   return parsed;
 };

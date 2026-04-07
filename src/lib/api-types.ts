@@ -76,13 +76,6 @@ export interface ReviewTaskItem {
   name: string;
   status: string;
   stageLabel: string;
-  formalReportHtml: string | null;
-  chapterSummaries: Array<{
-    title: string;
-    summary: string;
-    issueCount: number;
-    pageRange: string;
-  }>;
   progress: number;
   riskLevel: "高" | "中" | "低";
   documentIds: string[];

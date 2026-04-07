@@ -295,9 +295,9 @@ export const generateTenderChapterAiFindings = async (params: {
   tenderDocument: DocumentRecord;
   regulations: Regulation[];
   onProgress?: (payload: { current: number; total: number; chapterTitle: string; stage: "chapter_review" | "cross_scan" }) => void;
-}): Promise<{ findings: Finding[]; chapterSummaries: Array<{ title: string; summary: string; issueCount: number; pageRange: string }> }> => {
+}): Promise<{ findings: Finding[] }> => {
   const chapters = extractTenderChapters(params.tenderDocument);
-  if (chapters.length === 0) return { findings: [], chapterSummaries: [] };
+  if (chapters.length === 0) return { findings: [] };
 
   const chapterResults = [];
   for (let index = 0; index < chapters.length; index += 1) {
@@ -367,11 +367,5 @@ export const generateTenderChapterAiFindings = async (params: {
 
   return {
     findings: [...chapterFindings, ...crossFindings],
-    chapterSummaries: chapterResults.map((result, index) => ({
-      title: result.chapter_title,
-      summary: result.summary,
-      issueCount: result.findings.length,
-      pageRange: chapters[index]?.pageRange ?? "页码未知",
-    })),
   };
 };

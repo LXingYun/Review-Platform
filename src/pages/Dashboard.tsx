@@ -59,7 +59,7 @@ const capabilityPanels = [
   },
   {
     title: "AI 为主引擎",
-    description: "从上传、章节审查到正式报告，统一走 AI 审查链路。",
+    description: "从上传、章节审查到问题输出，统一走 AI 审查链路。",
     icon: Bot,
   },
   {
@@ -83,7 +83,7 @@ const processSteps = [
   {
     step: "03",
     title: "复核输出",
-    description: "在结果页查看问题清单、进度状态与正式审查报告。",
+    description: "在任务详情中查看问题清单、进度状态并完成复核。",
   },
 ];
 
@@ -133,7 +133,7 @@ const Dashboard = () => {
                 <span className="block text-sky-700">正式输出一屏掌握</span>
               </h1>
               <p className="max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
-                首页聚焦上传发起、任务进展、问题跟踪与报告输出，
+                首页聚焦上传发起、任务进展、问题跟踪与结果输出，
                 让进入系统后的第一眼先看到当前状态、待办事项和关键结果。
               </p>
             </div>
@@ -370,7 +370,7 @@ const Dashboard = () => {
                 </div>
                 <h3 className="text-base font-semibold text-slate-900">还没有审查任务</h3>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  可以直接从首页发起文件审查，系统会把任务、风险和报告自动串起来。
+                  可以直接从首页发起文件审查，系统会把任务、风险和问题清单自动串起来。
                 </p>
                 <Button asChild className="mt-5 rounded-full px-5">
                   <Link to="/upload">
