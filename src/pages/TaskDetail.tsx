@@ -1,15 +1,27 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  MessageSquarePlus,
+  RotateCcw,
   Search,
   Trash2,
   XCircle,
 } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +33,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
-import { DocumentItem, FindingListItem, ReviewTaskDetailItem } from "@/lib/api-types";
+import { DocumentItem, FindingListItem, ReviewTaskDetailItem, ReviewTaskResult } from "@/lib/api-types";
+
+const reviewerStorageKey = "review-platform-reviewer";
 
 const riskBadge = (risk: string) => {
   if (risk === "高") return "destructive" as const;
@@ -42,7 +56,7 @@ const reviewStageLabel = (stage: FindingListItem["reviewStage"]) => {
 };
 
 const parseMethodLabel = (parseMethod: DocumentItem["parseMethod"]) => {
-  if (parseMethod === "pdf-text") return "PDF文本";
+  if (parseMethod === "pdf-text") return "PDF 文本";
   if (parseMethod === "plain-text") return "纯文本";
   if (parseMethod === "image-ocr") return "图片 OCR";
   return "占位解析";
@@ -72,6 +86,12 @@ const ChunkGroup = ({
   );
 };
 
+const formatReviewAction = (action: FindingListItem["reviewLogs"][number]["action"]) => {
+  if (action === "confirm") return "确认问题";
+  if (action === "ignore") return "忽略问题";
+  return "添加备注";
+};
+
 const TaskDetail = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -80,6 +100,24 @@ const TaskDetail = () => {
   const [selectedIssue, setSelectedIssue] = useState<FindingListItem | null>(null);
   const [humanReviewFilter, setHumanReviewFilter] = useState<"all" | "needs_review" | "no_review">("all");
   const [confidenceFilter, setConfidenceFilter] = useState<"all" | "ge_80" | "ge_60" | "lt_60">("all");
+  const [reviewer, setReviewer] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setReviewer(window.localStorage.getItem(reviewerStorageKey) ?? "");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (reviewer) {
+      window.localStorage.setItem(reviewerStorageKey, reviewer);
+    }
+  }, [reviewer]);
+
+  useEffect(() => {
+    setReviewNote("");
+  }, [selectedIssue?.id]);
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ["review-tasks", "all"],
@@ -105,7 +143,7 @@ const TaskDetail = () => {
       return projectFindings.filter((finding) => finding.taskId === taskId);
     },
     enabled: Boolean(task?.projectId && task?.scenario),
-    refetchInterval: task && task.status !== "已完成" ? 3000 : false,
+    refetchInterval: task && (task.status === "待审核" || task.status === "进行中") ? 3000 : false,
   });
 
   const relatedDocuments = useMemo(() => {
@@ -145,11 +183,58 @@ const TaskDetail = () => {
     mutationFn: ({ id, status }: { id: string; status: "待复核" | "已确认" | "已忽略" }) =>
       apiRequest<FindingListItem>(`/findings/${id}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          status,
+          note: reviewNote.trim() || undefined,
+          reviewer: reviewNote.trim() ? reviewer.trim() : undefined,
+        }),
       }),
     onSuccess: () => {
       setSelectedIssue(null);
+      setReviewNote("");
       queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const addReviewLogMutation = useMutation({
+    mutationFn: ({ id, note, reviewerName }: { id: string; note: string; reviewerName: string }) =>
+      apiRequest<FindingListItem>(`/findings/${id}/review-log`, {
+        method: "POST",
+        body: JSON.stringify({
+          note,
+          reviewer: reviewerName,
+        }),
+      }),
+    onSuccess: () => {
+      setReviewNote("");
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+    },
+  });
+
+  const retryTaskMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<ReviewTaskResult>(`/review-tasks/${taskId}/retry`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+
+  const abortTaskMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<{ success: boolean }>(`/review-tasks/${taskId}/abort`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 
@@ -175,6 +260,16 @@ const TaskDetail = () => {
     return <p className="text-sm text-destructive">未找到该任务。</p>;
   }
 
+  const submitNote = () => {
+    if (!selectedIssue || !reviewNote.trim() || !reviewer.trim()) return;
+
+    addReviewLogMutation.mutate({
+      id: selectedIssue.id,
+      note: reviewNote.trim(),
+      reviewerName: reviewer.trim(),
+    });
+  };
+
   const renderIssueRow = (finding: FindingListItem) => (
     <div
       key={finding.id}
@@ -182,9 +277,7 @@ const TaskDetail = () => {
       onClick={() => setSelectedIssue(finding)}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="flex w-8 shrink-0 items-center justify-center self-stretch">
-          {riskIcon(finding.risk)}
-        </div>
+        <div className="flex w-8 shrink-0 items-center justify-center self-stretch">{riskIcon(finding.risk)}</div>
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">{finding.title}</p>
           <p className="mt-1 text-xs text-muted-foreground">{finding.location}</p>
@@ -216,31 +309,62 @@ const TaskDetail = () => {
           </div>
         </div>
 
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" disabled={deleteTaskMutation.isPending}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              删除任务
+        <div className="flex items-center gap-2">
+          {(task.status === "待审核" || task.status === "进行中") && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" disabled={abortTaskMutation.isPending}>
+                  中止任务
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>中止当前任务？</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    中止后任务会标记为未完成，当前审查结果不会保留，你可以稍后重新执行。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => abortTaskMutation.mutate()}>确认中止</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+
+          {(task.status === "失败" || task.status === "未完成") && (
+            <Button variant="outline" disabled={retryTaskMutation.isPending} onClick={() => retryTaskMutation.mutate()}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              重新执行
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>删除审查任务？</AlertDialogTitle>
-              <AlertDialogDescription>
-                删除后会同步移除该任务对应的问题结果，但不会删除原始上传文件。
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>取消</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => deleteTaskMutation.mutate()}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                确认删除
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          )}
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" disabled={deleteTaskMutation.isPending}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                删除任务
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>删除审查任务？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  删除后会同步移除该任务对应的问题结果，但不会删除原始上传文件。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteTaskMutation.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  确认删除
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -250,6 +374,7 @@ const TaskDetail = () => {
               <Badge variant="outline">{task.projectName}</Badge>
               <Badge variant="outline">{task.scenario === "tender_compliance" ? "招标审查" : "投标审查"}</Badge>
               <Badge variant={riskBadge(task.riskLevel)}>{task.riskLevel}风险</Badge>
+              {task.attemptCount > 1 && <Badge variant="outline">第 {task.attemptCount} 次执行</Badge>}
             </div>
             <div className="space-y-1 text-sm text-muted-foreground">
               <p>任务状态：{task.status}</p>
@@ -355,12 +480,7 @@ const TaskDetail = () => {
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="搜索问题..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="pl-10"
-              />
+              <Input placeholder="搜索问题..." value={search} onChange={(event) => setSearch(event.target.value)} className="pl-10" />
             </div>
 
             <Select value={humanReviewFilter} onValueChange={(value) => setHumanReviewFilter(value as typeof humanReviewFilter)}>
@@ -380,9 +500,9 @@ const TaskDetail = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部置信度</SelectItem>
-                <SelectItem value="ge_80">80%以上</SelectItem>
-                <SelectItem value="ge_60">60%以上</SelectItem>
-                <SelectItem value="lt_60">60%以下</SelectItem>
+                <SelectItem value="ge_80">80% 以上</SelectItem>
+                <SelectItem value="ge_60">60% 以上</SelectItem>
+                <SelectItem value="lt_60">60% 以下</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -440,7 +560,7 @@ const TaskDetail = () => {
               </DialogHeader>
 
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline">{reviewStageLabel(selectedIssue.reviewStage)}</Badge>
                   <Badge variant={riskBadge(selectedIssue.risk)}>{selectedIssue.risk}风险</Badge>
                   <Badge variant="outline">{selectedIssue.category}</Badge>
@@ -496,20 +616,44 @@ const TaskDetail = () => {
                 <ChunkGroup
                   title="法规依据片段"
                   items={selectedIssue.regulationChunks.map((chunk) => ({
-                    label: `${chunk.regulationName} [${chunk.regulationCategory}]${chunk.sectionTitle ? ` · ${chunk.sectionTitle}` : ""} · 条款片段 ${chunk.order}`,
+                    label: `${chunk.regulationName} [${chunk.regulationCategory}]${chunk.sectionTitle ? ` · ${chunk.sectionTitle}` : ""} · 片段 ${chunk.order}`,
                     text: chunk.text,
                   }))}
                 />
 
-                <div>
-                  <Label className="text-xs text-muted-foreground">复核备注</Label>
-                  <Textarea placeholder="输入复核意见..." className="mt-1" />
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">复核人</Label>
+                    <Input
+                      value={reviewer}
+                      onChange={(event) => setReviewer(event.target.value)}
+                      placeholder="输入复核人姓名"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">新备注</Label>
+                    <Textarea
+                      value={reviewNote}
+                      onChange={(event) => setReviewNote(event.target.value)}
+                      placeholder="输入复核意见..."
+                      className="mt-1"
+                    />
+                  </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={!reviewNote.trim() || !reviewer.trim() || addReviewLogMutation.isPending}
+                    onClick={submitNote}
+                  >
+                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+                    保存备注
+                  </Button>
                   <Button
                     className="flex-1"
-                    disabled={updateFindingMutation.isPending}
+                    disabled={updateFindingMutation.isPending || (!!reviewNote.trim() && !reviewer.trim())}
                     onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已确认" })}
                   >
                     <CheckCircle2 className="mr-1 h-4 w-4" />
@@ -518,11 +662,34 @@ const TaskDetail = () => {
                   <Button
                     variant="outline"
                     className="flex-1"
-                    disabled={updateFindingMutation.isPending}
+                    disabled={updateFindingMutation.isPending || (!!reviewNote.trim() && !reviewer.trim())}
                     onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已忽略" })}
                   >
                     忽略
                   </Button>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground">复核历史</Label>
+                  <div className="mt-2 space-y-2">
+                    {selectedIssue.reviewLogs.length === 0 && (
+                      <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                        还没有复核记录。
+                      </div>
+                    )}
+                    {selectedIssue.reviewLogs.map((log) => (
+                      <div key={log.id} className="rounded-lg border border-border bg-muted/40 p-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <Badge variant="outline">{formatReviewAction(log.action)}</Badge>
+                          {log.status && <Badge variant="outline">{log.status}</Badge>}
+                          <span>{log.reviewer}</span>
+                          <span>·</span>
+                          <span>{new Date(log.createdAt).toLocaleString()}</span>
+                        </div>
+                        <p className="mt-2 text-sm text-foreground">{log.note}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </>

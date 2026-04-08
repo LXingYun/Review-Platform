@@ -1,7 +1,6 @@
 export interface DashboardStat {
   label: string;
   value: string;
-  change: string;
   color: string;
 }
 
@@ -21,8 +20,8 @@ export interface DashboardResponse {
 export interface ProjectListItem {
   id: string;
   name: string;
-  type: string;
-  status: string;
+  type: "招标审查" | "投标审查";
+  status: "待开始" | "进行中" | "已完成" | "未完成";
   description: string;
   taskCount: number;
   issueCount: number;
@@ -60,6 +59,7 @@ export interface ReviewTaskResult {
     status: string;
     progress: number;
     riskLevel: "高" | "中" | "低";
+    attemptCount: number;
   };
   findings: Array<{
     id: string;
@@ -74,16 +74,26 @@ export interface ReviewTaskItem {
   projectName: string;
   scenario: "tender_compliance" | "bid_consistency";
   name: string;
-  status: string;
+  status: "待审核" | "进行中" | "已完成" | "失败" | "未完成";
   stageLabel: string;
   progress: number;
   riskLevel: "高" | "中" | "低";
   documentIds: string[];
+  attemptCount: number;
   createdAt: string;
   completedAt: string | null;
 }
 
 export type ReviewTaskDetailItem = ReviewTaskItem;
+
+export interface FindingReviewLog {
+  id: string;
+  action: "comment" | "confirm" | "ignore";
+  status?: "待复核" | "已确认" | "已忽略";
+  note: string;
+  reviewer: string;
+  createdAt: string;
+}
 
 export interface FindingListItem {
   id: string;
@@ -116,6 +126,7 @@ export interface FindingListItem {
   needsHumanReview: boolean;
   confidence: number;
   reviewStage: "chapter_review" | "cross_section_review" | "response_consistency_review";
+  reviewLogs: FindingReviewLog[];
   sourceChunks: Array<{
     documentId: string;
     documentName: string;

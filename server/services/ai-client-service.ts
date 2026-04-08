@@ -21,9 +21,9 @@ const extractJsonEnvelope = (value: string) => {
 
 const normalizeSmartQuoteDelimiters = (value: string) =>
   value
-    .replace(/([{,]\s*)[“”]([^“”]+?)[“”](\s*:)/g, '$1"$2"$3')
-    .replace(/([:\[,]\s*)[“”]/g, '$1"')
-    .replace(/[“”](\s*[,}\]])/g, '"$1')
+    .replace(/([{,]\s*)[“”"「」『』]([^“”"「」『』]+?)[“”"「」『』](\s*:)/g, '$1"$2"$3')
+    .replace(/([:[,\s]\s*)[“”"「」『』]/g, '$1"')
+    .replace(/[“”"「」『』](\s*[,}\]])/g, '"$1')
     .replace(/"\s*：/g, '":');
 
 const unique = <T>(values: T[]) => Array.from(new Set(values));
@@ -35,13 +35,7 @@ export const parseStructuredJsonContent = <T>(content: string): T => {
   const normalizedQuotes = normalizeSmartQuoteDelimiters(jsonEnvelope);
   const normalizedFence = normalizeSmartQuoteDelimiters(fenceStripped);
 
-  const attempts = unique([
-    cleaned,
-    fenceStripped,
-    jsonEnvelope,
-    normalizedFence,
-    normalizedQuotes,
-  ]).filter(Boolean);
+  const attempts = unique([cleaned, fenceStripped, jsonEnvelope, normalizedFence, normalizedQuotes]).filter(Boolean);
 
   let lastError: unknown = null;
   for (const candidate of attempts) {
@@ -61,6 +55,7 @@ const requestChatCompletion = async (params: {
   model: string;
   systemPrompt: string;
   userPrompt: string;
+  signal?: AbortSignal;
 }) => {
   const response = await fetch(`${params.baseUrl}/chat/completions`, {
     method: "POST",
@@ -77,6 +72,7 @@ const requestChatCompletion = async (params: {
         { role: "user", content: params.userPrompt },
       ],
     }),
+    signal: params.signal,
   });
 
   if (!response.ok) {
@@ -105,6 +101,7 @@ const repairStructuredJson = async <T>(params: {
   baseUrl: string;
   model: string;
   rawContent: string;
+  signal?: AbortSignal;
 }) => {
   const repairedContent = await requestChatCompletion({
     apiKey: params.apiKey,
@@ -112,10 +109,11 @@ const repairStructuredJson = async <T>(params: {
     model: params.model,
     systemPrompt: [
       "你是 JSON 修复助手。",
-      "请把用户提供的内容修复成合法 JSON。",
+      "请把用户提供的内容修复为合法 JSON。",
       "不得添加解释，不得改变字段语义，只返回 JSON。",
     ].join("\n"),
     userPrompt: params.rawContent,
+    signal: params.signal,
   });
 
   return parseStructuredJsonContent<T>(repairedContent);
@@ -124,6 +122,7 @@ const repairStructuredJson = async <T>(params: {
 export const requestStructuredAiReview = async <T>(params: {
   systemPrompt: string;
   userPrompt: string;
+  signal?: AbortSignal;
 }): Promise<T> => {
   const config = getAiConfig();
 
@@ -137,6 +136,7 @@ export const requestStructuredAiReview = async <T>(params: {
     model: config.model,
     systemPrompt: params.systemPrompt,
     userPrompt: params.userPrompt,
+    signal: params.signal,
   });
 
   try {
@@ -148,13 +148,12 @@ export const requestStructuredAiReview = async <T>(params: {
         baseUrl: config.baseUrl,
         model: config.model,
         rawContent: content,
+        signal: params.signal,
       });
     } catch {
       const snippet = stripUtf8Bom(content).replace(/\s+/g, " ").slice(0, 160);
       throw new Error(
-        parseError instanceof Error
-          ? `${parseError.message}: ${snippet}`
-          : `AI 返回了非 JSON 内容: ${snippet}`,
+        parseError instanceof Error ? `${parseError.message}: ${snippet}` : `AI 返回了非 JSON 内容: ${snippet}`,
       );
     }
   }

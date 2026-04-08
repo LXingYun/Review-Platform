@@ -44,9 +44,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                 </div>
                 <div className="space-y-1.5">
                   <p className="truncate text-lg font-semibold tracking-tight text-slate-900">审查中心</p>
-                  <p className="text-[13px] leading-5 text-slate-500">
-                    招投标文件智能审查平台
-                  </p>
+                  <p className="text-[13px] leading-5 text-slate-500">招投标文件智能审查平台</p>
                 </div>
               </div>
             )}
@@ -68,9 +66,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                     key={item.path}
                     to={item.path}
                     className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-300 ${
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-lg"
-                        : "text-slate-600 hover:bg-primary/5 hover:text-primary"
+                      isActive ? "bg-primary text-primary-foreground shadow-lg" : "text-slate-600 hover:bg-primary/5 hover:text-primary"
                     }`}
                     title={collapsed ? item.label : undefined}
                   >
@@ -104,15 +100,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       <main className="flex-1 overflow-auto">
-        <div
-          className={
-            isHome
-              ? "min-h-screen px-6 py-6 xl:px-8"
-              : "mx-auto max-w-7xl p-6"
-          }
-        >
-          {children}
-        </div>
+        <div className={isHome ? "min-h-screen px-6 py-6 xl:px-8" : "mx-auto max-w-7xl p-6"}>{children}</div>
       </main>
     </div>
   );

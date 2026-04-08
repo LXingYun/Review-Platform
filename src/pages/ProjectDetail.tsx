@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileSearch, FolderKanban, Trash2, UploadCloud } from "lucide-react";
+import { ArrowLeft, FileSearch, FolderKanban, RotateCcw, Trash2, UploadCloud } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,24 +17,25 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { apiRequest } from "@/lib/api";
-import { DocumentItem, ProjectDetailItem, ReviewTaskItem } from "@/lib/api-types";
+import { DocumentItem, ProjectDetailItem, ReviewTaskItem, ReviewTaskResult } from "@/lib/api-types";
 
-const statusStyle = (status: string) => {
+const statusStyle = (status: ProjectDetailItem["status"]) => {
   if (status === "进行中") return "bg-primary/10 text-primary border-primary/20";
   if (status === "已完成") return "bg-success/10 text-success border-success/20";
+  if (status === "未完成") return "bg-warning/10 text-warning border-warning/20";
   return "bg-muted text-muted-foreground border-border";
 };
 
-const riskBadge = (risk: string) => {
+const taskRiskBadge = (risk: ReviewTaskItem["riskLevel"]) => {
   if (risk === "高") return "destructive" as const;
   if (risk === "中") return "secondary" as const;
   return "outline" as const;
 };
 
 const parseMethodLabel = (parseMethod: DocumentItem["parseMethod"]) => {
-  if (parseMethod === "pdf-text") return "PDF文本";
+  if (parseMethod === "pdf-text") return "PDF 文本";
   if (parseMethod === "plain-text") return "纯文本";
-  if (parseMethod === "image-ocr") return "图片OCR";
+  if (parseMethod === "image-ocr") return "图片 OCR";
   return "占位解析";
 };
 
@@ -69,6 +70,7 @@ const ProjectDetail = () => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       navigate("/projects");
     },
   });
@@ -77,6 +79,32 @@ const ProjectDetail = () => {
     mutationFn: (taskId: string) =>
       apiRequest<{ success: boolean; taskId: string; projectId: string }>(`/review-tasks/${taskId}`, {
         method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["review-tasks", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+
+  const retryTaskMutation = useMutation({
+    mutationFn: (taskId: string) =>
+      apiRequest<ReviewTaskResult>(`/review-tasks/${taskId}/retry`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["review-tasks", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["findings"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+
+  const abortTaskMutation = useMutation({
+    mutationFn: (taskId: string) =>
+      apiRequest<{ success: boolean }>(`/review-tasks/${taskId}/abort`, {
+        method: "POST",
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["review-tasks", projectId] });
@@ -105,17 +133,14 @@ const ProjectDetail = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
-            <p className="text-muted-foreground mt-1">项目详情、任务记录与文件清单</p>
+            <p className="mt-1 text-muted-foreground">项目详情、任务记录与文件清单</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button
-                variant="outline"
-                disabled={deleteProjectMutation.isPending}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
+              <Button variant="outline" disabled={deleteProjectMutation.isPending}>
+                <Trash2 className="mr-2 h-4 w-4" />
                 删除项目
               </Button>
             </AlertDialogTrigger>
@@ -123,7 +148,7 @@ const ProjectDetail = () => {
               <AlertDialogHeader>
                 <AlertDialogTitle>删除项目？</AlertDialogTitle>
                 <AlertDialogDescription>
-                  删除后会同时移除项目下的任务、问题结果和已上传文件，且无法恢复。
+                  删除后会同时移除项目下的任务、问题结果和上传文件，且无法恢复。
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -138,17 +163,17 @@ const ProjectDetail = () => {
             </AlertDialogContent>
           </AlertDialog>
           <Button onClick={() => navigate(`/upload?projectId=${encodeURIComponent(project.id)}`)}>
-            <UploadCloud className="h-4 w-4 mr-2" />
+            <UploadCloud className="mr-2 h-4 w-4" />
             新建审查任务
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="border border-border shadow-sm lg:col-span-2">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
+              <div className="rounded-lg bg-primary/10 p-2">
                 <FolderKanban className="h-5 w-5 text-primary" />
               </div>
               <div>
@@ -156,13 +181,13 @@ const ProjectDetail = () => {
                 <p className="text-sm text-muted-foreground">{project.type}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 mt-4">
+            <div className="mt-4 flex items-center gap-2">
               <Badge variant="outline" className={statusStyle(project.status)}>
                 {project.status}
               </Badge>
               <Badge variant="outline">创建于 {project.date}</Badge>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground rounded-lg bg-muted p-3">
+            <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
               {project.description || "暂无项目描述"}
             </p>
           </CardContent>
@@ -189,7 +214,7 @@ const ProjectDetail = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="border border-border shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">审查任务</CardTitle>
@@ -200,54 +225,83 @@ const ProjectDetail = () => {
             {tasks.map((task) => (
               <div key={task.id} className="rounded-lg border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{task.name}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {task.scenario === "tender_compliance" ? "招标审查" : "投标审查"} · {task.createdAt.slice(0, 10)}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">当前阶段：{task.stageLabel}</p>
-                          </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{task.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {task.scenario === "tender_compliance" ? "招标审查" : "投标审查"} · {task.createdAt.slice(0, 10)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">当前阶段：{task.stageLabel}</p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">{task.status}</Badge>
-                    <Badge variant={riskBadge(task.riskLevel)}>{task.riskLevel}风险</Badge>
+                    <Badge variant={taskRiskBadge(task.riskLevel)}>{task.riskLevel}风险</Badge>
                   </div>
                 </div>
-                <div className="mt-3 flex justify-end">
-                  <div className="flex gap-2">
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  {(task.status === "待审核" || task.status === "进行中") && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="outline" disabled={deleteTaskMutation.isPending}>
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          删除任务
+                        <Button size="sm" variant="outline" disabled={abortTaskMutation.isPending}>
+                          中止任务
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>删除审查任务？</AlertDialogTitle>
+                          <AlertDialogTitle>中止当前任务？</AlertDialogTitle>
                           <AlertDialogDescription>
-                            删除后会同步移除该任务产生的问题结果，但不会删除原始上传文件。
+                            中止后任务会标记为未完成，当前审查结果不会保留，你可以稍后重新执行。
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>取消</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteTaskMutation.mutate(task.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            确认删除
-                          </AlertDialogAction>
+                          <AlertDialogAction onClick={() => abortTaskMutation.mutate(task.id)}>确认中止</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                  )}
+
+                  {(task.status === "失败" || task.status === "未完成") && (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => navigate(`/tasks/${task.id}`)}
+                      disabled={retryTaskMutation.isPending}
+                      onClick={() => retryTaskMutation.mutate(task.id)}
                     >
-                      <FileSearch className="h-4 w-4 mr-2" />
-                      查看任务
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      重新执行
                     </Button>
-                  </div>
+                  )}
+
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="outline" disabled={deleteTaskMutation.isPending}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        删除任务
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>删除审查任务？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          删除后会同时移除该任务产生的问题结果，但不会删除原始上传文件。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteTaskMutation.mutate(task.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          确认删除
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/tasks/${task.id}`)}>
+                    <FileSearch className="mr-2 h-4 w-4" />
+                    查看任务
+                  </Button>
                 </div>
               </div>
             ))}
@@ -266,13 +320,13 @@ const ProjectDetail = () => {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">{document.originalName}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {document.role} · {document.pageCount} 页 · {parseMethodLabel(document.parseMethod)}
                     </p>
                   </div>
                   <Badge variant="outline">{document.parseStatus}</Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-3 rounded-lg bg-muted p-3">
+                <p className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
                   {document.textPreview || "暂无解析摘要"}
                 </p>
               </div>

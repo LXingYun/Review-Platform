@@ -1,10 +1,10 @@
+import { z } from "zod";
 import { store } from "../store";
 import { Regulation } from "../types";
 import { createId, normalizeUploadedFileName } from "../utils";
 import { getAiConfig } from "./ai-config-service";
 import { requestStructuredAiReview } from "./ai-client-service";
-import { parseDocumentBuffer } from "./document-parse-service";
-import { z } from "zod";
+import { isSupportedUpload, parseDocumentBuffer } from "./document-parse-service";
 
 export interface RegulationDraft {
   name: string;
@@ -25,20 +25,24 @@ const aiRegulationDraftSchema = z.object({
   category: z.string(),
   updated: z.string(),
   textPreview: z.string(),
-  sections: z.array(
-    z.object({
-      title: z.string(),
-      rules: z.number(),
-    }),
-  ).min(1),
-  chunks: z.array(
-    z.object({
-      id: z.string(),
-      text: z.string(),
-      order: z.number(),
-      sectionTitle: z.string().optional(),
-    }),
-  ).min(1),
+  sections: z
+    .array(
+      z.object({
+        title: z.string(),
+        rules: z.number(),
+      }),
+    )
+    .min(1),
+  chunks: z
+    .array(
+      z.object({
+        id: z.string(),
+        text: z.string(),
+        order: z.number(),
+        sectionTitle: z.string().optional(),
+      }),
+    )
+    .min(1),
 });
 
 const inferRegulationTitle = (fallbackName: string, chunks: Regulation["chunks"]) => {
@@ -60,7 +64,7 @@ const inferRegulationTitle = (fallbackName: string, chunks: Regulation["chunks"]
 };
 
 const inferRegulationCategory = (text: string) => {
-  if (text.includes("法实施条例") || text.includes("条例")) return "行政法规";
+  if (text.includes("实施条例") || text.includes("条例")) return "行政法规";
   if (text.includes("规定") || text.includes("办法") || text.includes("细则")) return "部门规章";
   if (text.includes("法")) return "法律";
   return "上传法规";
@@ -122,9 +126,7 @@ export const updateRegulation = (regulationId: string, input: Omit<Regulation, "
 
   store.update((state) => ({
     ...state,
-    regulations: state.regulations.map((item) =>
-      item.id === regulationId ? nextRegulation : item,
-    ),
+    regulations: state.regulations.map((item) => (item.id === regulationId ? nextRegulation : item)),
   }));
 
   return nextRegulation;
@@ -147,11 +149,24 @@ export const deleteRegulation = (regulationId: string) => {
 };
 
 const buildRegulationDraftFromFile = async (file: Express.Multer.File): Promise<RegulationDraft> => {
-  const rawName = normalizeUploadedFileName(file.originalname).replace(/\.[^.]+$/, "");
+  const originalName = normalizeUploadedFileName(file.originalname);
+
+  if (
+    !isSupportedUpload({
+      originalName,
+      mimeType: file.mimetype || "application/octet-stream",
+    })
+  ) {
+    throw new Error("仅支持 PDF、文本和图片法规文件");
+  }
+
+  const rawName = originalName.replace(/\.[^.]+$/, "");
+  const draftId = createId("reg-draft");
   const parsed = await parseDocumentBuffer({
-    originalName: file.originalname,
+    originalName,
     mimeType: file.mimetype || "application/octet-stream",
     fileBuffer: file.buffer,
+    chunkIdPrefix: draftId,
   });
 
   const title = inferRegulationTitle(rawName, parsed.chunks);
@@ -166,7 +181,7 @@ const buildRegulationDraftFromFile = async (file: Express.Multer.File): Promise<
     textPreview: parsed.textPreview,
     chunks: parsed.chunks.map((chunk, index) => ({
       ...chunk,
-      id: `${title}-chunk-${index + 1}`,
+      id: `${draftId}-chunk-${index + 1}`,
     })),
     sections: [
       {
@@ -189,23 +204,27 @@ const refineDraftWithAi = async (draft: RegulationDraft) => {
     await requestStructuredAiReview<unknown>({
       systemPrompt: [
         "你是法规知识库整理助手。",
-        "你的任务是基于已解析的法规草稿，优化法规名称、分类、日期、摘要、section 标题以及条款归属。",
-        "你只能依据输入草稿中的信息调整，不得编造未出现的法律名称、发布日期或条文。",
-        "如果无法判断，就保留原草稿，不要杜撰。",
+        "请基于给定草稿优化法规名称、分类、日期、摘要、章节标题和条款归属。",
+        "只能基于输入文本进行整理，不得编造法规名称、发布日期或条文。",
+        "如无法判断，请保留原始内容。",
         "只返回合法 JSON。",
       ].join("\n"),
-      userPrompt: JSON.stringify({
-        draft,
-        requirements: {
-          categoryExamples: ["法律", "行政法规", "部门规章", "上传法规"],
-          goals: [
-            "尽量提取正式法规名称",
-            "尽量归纳更准确的 section 标题",
-            "让条款归属到更合适的 section",
-            "不要改变条款核心内容",
-          ],
+      userPrompt: JSON.stringify(
+        {
+          draft,
+          requirements: {
+            categoryExamples: ["法律", "行政法规", "部门规章", "上传法规"],
+            goals: [
+              "尽量提取正式法规名称",
+              "尽量归纳更准确的章节标题",
+              "让条款归属到更合适的章节",
+              "不要改动条款核心内容",
+            ],
+          },
         },
-      }),
+        null,
+        2,
+      ),
     }),
   );
 
@@ -221,7 +240,8 @@ const refineDraftWithAi = async (draft: RegulationDraft) => {
     })),
     sections: refined.sections.map((section) => ({
       ...section,
-      rules: refined.chunks.filter((chunk) => (chunk.sectionTitle ?? refined.sections[0]?.title) === section.title).length,
+      rules: refined.chunks.filter((chunk) => (chunk.sectionTitle ?? refined.sections[0]?.title) === section.title)
+        .length,
     })),
   };
 

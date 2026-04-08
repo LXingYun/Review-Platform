@@ -7,7 +7,7 @@ export const createProjectSchema = z.object({
 });
 
 export const uploadDocumentSchema = z.object({
-  projectId: z.string().min(1, "缺少项目ID"),
+  projectId: z.string().min(1, "缺少项目 ID"),
   role: z.enum(["tender", "bid", "regulation", "clarification", "attachment"]),
 });
 
@@ -25,6 +25,13 @@ export const createBidReviewSchema = z.object({
 
 export const updateFindingStatusSchema = z.object({
   status: z.enum(["待复核", "已确认", "已忽略"]),
+  note: z.string().trim().max(2000).optional(),
+  reviewer: z.string().trim().max(100).optional(),
+});
+
+export const createFindingReviewLogSchema = z.object({
+  note: z.string().trim().min(1).max(2000),
+  reviewer: z.string().trim().min(1).max(100),
 });
 
 export const createRegulationSchema = z.object({
@@ -33,14 +40,16 @@ export const createRegulationSchema = z.object({
   updated: z.string().min(1, "更新时间不能为空"),
   ruleCount: z.coerce.number().int().positive(),
   textPreview: z.string().default(""),
-  chunks: z.array(
-    z.object({
-      id: z.string(),
-      text: z.string(),
-      order: z.coerce.number().int().positive(),
-      sectionTitle: z.string().optional(),
-    }),
-  ).default([]),
+  chunks: z
+    .array(
+      z.object({
+        id: z.string(),
+        text: z.string(),
+        order: z.coerce.number().int().positive(),
+        sectionTitle: z.string().optional(),
+      }),
+    )
+    .default([]),
   sections: z.array(
     z.object({
       title: z.string().min(1),

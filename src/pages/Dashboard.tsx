@@ -3,16 +3,13 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
-  Bot,
   Building2,
   CheckCircle2,
   Clock3,
   FileSearch,
   FolderKanban,
-  Landmark,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
@@ -33,7 +30,7 @@ const statIcons = {
 const quickActions = [
   {
     title: "发起文件审查",
-    description: "上传 PDF 或 Word，进入招标/投标审查流程。",
+    description: "上传 PDF、文本或图片文件，进入招标/投标审查流程。",
     href: "/upload",
     icon: FileSearch,
   },
@@ -53,19 +50,19 @@ const quickActions = [
 
 const capabilityPanels = [
   {
-    title: "审查更可信",
-    description: "聚焦风险、进度和留痕，让关键状态进入首页第一视野。",
+    title: "审查状态一屏掌握",
+    description: "把任务、风险、结果和后续动作集中到一个首页视图。",
     icon: ShieldCheck,
   },
   {
-    title: "AI 为主引擎",
-    description: "从上传、章节审查到问题输出，统一走 AI 审查链路。",
-    icon: Bot,
+    title: "AI 审查主链路",
+    description: "上传、抽取、审查和结果回显都由统一的 AI 审查链路驱动。",
+    icon: Sparkles,
   },
   {
-    title: "信息表达更清晰",
-    description: "用更克制的层级和留白呈现状态、结果与后续动作。",
-    icon: Landmark,
+    title: "聚焦待办和异常",
+    description: "优先暴露进行中、失败和未完成任务，减少状态遗漏。",
+    icon: Building2,
   },
 ];
 
@@ -78,12 +75,12 @@ const processSteps = [
   {
     step: "02",
     title: "AI 审查",
-    description: "系统按章节推进审查，识别高风险条款与一致性问题。",
+    description: "系统按章节推进审查，识别高风险条款和一致性问题。",
   },
   {
     step: "03",
     title: "复核输出",
-    description: "在任务详情中查看问题清单、进度状态并完成复核。",
+    description: "在任务详情中查看问题清单、补充备注并完成复核。",
   },
 ];
 
@@ -96,7 +93,7 @@ const riskBadgeVariant = (risk: string) => {
 const statusTone = (status: string) => {
   if (status === "已完成") return "text-success";
   if (status === "进行中") return "text-primary";
-  if (status === "失败") return "text-destructive";
+  if (status === "失败" || status === "未完成") return "text-destructive";
   return "text-muted-foreground";
 };
 
@@ -120,21 +117,17 @@ const Dashboard = () => {
 
         <div className="relative grid gap-8 xl:grid-cols-5">
           <div className="space-y-6 xl:col-span-3">
-            <Badge
-              variant="outline"
-              className="rounded-full border-sky-200 bg-sky-50 px-4 py-1 text-sky-700"
-            >
+            <Badge variant="outline" className="rounded-full border-sky-200 bg-sky-50 px-4 py-1 text-sky-700">
               招投标文件智能审查平台
             </Badge>
 
             <div className="max-w-3xl space-y-4">
               <h1 className="text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
                 审查任务、风险线索与
-                <span className="block text-sky-700">正式输出一屏掌握</span>
+                <span className="block text-sky-700">复核输出一屏掌握</span>
               </h1>
               <p className="max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
-                首页聚焦上传发起、任务进展、问题跟踪与结果输出，
-                让进入系统后的第一眼先看到当前状态、待办事项和关键结果。
+                首页聚焦上传发起、任务进展、问题跟踪与结果输出，让进入系统后的第一眼先看到当前状态、待办事项和关键结果。
               </p>
             </div>
 
@@ -194,10 +187,7 @@ const Dashboard = () => {
                   const Icon = statIcons[stat.label as keyof typeof statIcons] ?? FolderKanban;
 
                   return (
-                    <div
-                      key={stat.label}
-                      className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm"
-                    >
+                    <div key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-sm text-slate-300">{stat.label}</p>
@@ -207,73 +197,12 @@ const Dashboard = () => {
                           <Icon className="h-5 w-5" />
                         </div>
                       </div>
-                      <div className="mt-3 flex items-center gap-2 text-xs text-slate-300">
-                        <TrendingUp className="h-3.5 w-3.5" />
-                        <span>{stat.change}</span>
-                      </div>
                     </div>
                   );
                 })}
             </div>
-
-            <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-emerald-400/15 p-2.5 text-emerald-200">
-                  <Building2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-emerald-100">首页信息组织方式</p>
-                  <p className="mt-1 text-sm leading-6 text-emerald-50/80">
-                    强调状态、进度、问题与输出结果，减少分散注意力的装饰元素，提升浏览效率。
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {isLoading &&
-          Array.from({ length: 4 }).map((_, index) => (
-            <Card key={index} className="rounded-[24px] border-slate-200/80 bg-white/90 shadow-sm">
-              <CardContent className="p-6">
-                <div className="h-3 w-24 rounded-full bg-slate-100" />
-                <div className="mt-4 h-8 w-20 rounded-full bg-slate-100" />
-              </CardContent>
-            </Card>
-          ))}
-
-        {!isLoading &&
-          stats.map((stat) => {
-            const Icon = statIcons[stat.label as keyof typeof statIcons] ?? FolderKanban;
-
-            return (
-              <Card
-                key={stat.label}
-                className="rounded-[24px] border-slate-200/80 bg-white/95 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.4)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_60px_-36px_rgba(14,116,144,0.28)]"
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-                      <p className="mt-3 text-3xl font-semibold text-slate-900">{stat.value}</p>
-                    </div>
-                    <div className="rounded-2xl bg-sky-50 p-3 text-sky-700">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    <span className={stat.change.startsWith("+") ? "text-emerald-600" : "text-rose-600"}>
-                      {stat.change}
-                    </span>
-                    <span>较上期</span>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-12">
@@ -321,10 +250,7 @@ const Dashboard = () => {
 
               <div className="mt-5 space-y-3">
                 {processSteps.map((item) => (
-                  <div
-                    key={item.step}
-                    className="flex gap-4 rounded-2xl border border-slate-200/80 bg-white p-4"
-                  >
+                  <div key={item.step} className="flex gap-4 rounded-2xl border border-slate-200/80 bg-white p-4">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sm font-semibold text-sky-700">
                       {item.step}
                     </div>
@@ -345,7 +271,7 @@ const Dashboard = () => {
               <div>
                 <CardTitle className="text-xl text-slate-900">最近审查任务</CardTitle>
                 <CardDescription className="mt-1 text-sm leading-6 text-slate-500">
-                  保留你原来的任务追踪能力，但层级更清晰、视觉更轻。
+                  保留任务追踪能力，但把状态、风险和进度压到更直观的卡片里。
                 </CardDescription>
               </div>
               <Button asChild variant="outline" className="rounded-full border-slate-200">
@@ -359,7 +285,7 @@ const Dashboard = () => {
           <CardContent>
             {isError && (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-                仪表盘数据加载失败，请稍后刷新后重试。
+                仪表盘数据加载失败，请刷新后重试。
               </div>
             )}
 

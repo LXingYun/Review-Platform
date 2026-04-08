@@ -60,16 +60,19 @@ const crossScanSchema = z.object({
   summary: z.string().default(""),
 });
 
-const CHAPTER_TITLE_PATTERNS = [
-  /第[一二三四五六七八九十百\d]+章[^。\n]{0,50}/,
-  /第[一二三四五六七八九十百\d]+节[^。\n]{0,40}/,
-  /第[一二三四五六七八九十百\d]+条[^。\n]{0,40}/,
-  /[一二三四五六七八九十]+、[^。\n]{0,40}/,
-  /\d+[、.．][^。\n]{0,40}/,
-  /(投标人须知|评标办法|合同条款|招标公告|技术要求|技术标准|工程量清单|资格审查|商务条款|投标文件格式)/,
+const chapterTitlePatterns = [
+  /^\s*第[一二三四五六七八九十百千\d]+章[^\n]{0,50}/,
+  /^\s*第[一二三四五六七八九十百千\d]+节[^\n]{0,40}/,
+  /^\s*\d+\.(?!\d)\s*(项目概况与招标范围|投标人资格要求|招标文件的获取|投标文件的递交|开标时间及地点|发布公告的媒介|联系方式|总则|招标文件|投标文件|评标办法|合同条款|电子招标投标相关要求)[^\n]{0,40}/,
+  /^\s*(招标公告|投标人须知|评标办法|合同条款(?:及格式)?|工程量清单|技术要求|技术标准|资格审查|商务条款|投标文件格式|电子招标投标相关要求|项目概况与招标范围)[^\n]{0,40}/,
 ];
 
 const normalizeTitle = (text: string) => text.replace(/\s+/g, " ").trim();
+
+const stripLeadingPageNumber = (text: string) => {
+  const normalized = normalizeTitle(text);
+  return normalized.replace(/^(\d+)\s+(?=(第|\d+\.(?!\d)|招标公告|投标人须知|评标办法|合同条款|工程量清单|技术要求|技术标准|资格审查|商务条款|投标文件格式|电子招标投标相关要求))/u, "");
+};
 
 const isTocNoise = (text: string) => {
   const normalized = normalizeTitle(text);
@@ -77,16 +80,23 @@ const isTocNoise = (text: string) => {
   if (normalized.includes("目录") && normalized.length <= 12) return true;
   if (/\.{3,}\s*\d+$/.test(normalized)) return true;
   if (/^\d+$/.test(normalized)) return true;
+  if (/^\d+[、.]/.test(normalized) && !/^\d+\.(?!\d)/.test(normalized)) return true;
+  if (/^第[一二三四五六七八九十百千\d]+条/.test(normalized)) return true;
+  if (/^\d+\.\d+/.test(normalized)) return true;
   return false;
 };
 
 const extractChapterTitle = (text: string) => {
-  for (const pattern of CHAPTER_TITLE_PATTERNS) {
-    const match = text.match(pattern);
+  const sanitized = stripLeadingPageNumber(text);
+
+  for (const pattern of chapterTitlePatterns) {
+    const match = sanitized.match(pattern);
     if (!match?.[0]) continue;
+
     const normalized = normalizeTitle(match[0]);
-    if (isTocNoise(normalized)) continue;
-    return normalized;
+    if (!isTocNoise(normalized)) {
+      return normalized;
+    }
   }
 
   return null;
@@ -139,7 +149,9 @@ const buildRegulationCandidatesForChapter = (chapter: TenderChapter, regulations
   const unique = new Map<string, (typeof candidates)[number]>();
   candidates.forEach((candidate) => {
     const key = `${candidate.regulation.id}:${candidate.chunk.id}`;
-    if (!unique.has(key)) unique.set(key, candidate);
+    if (!unique.has(key)) {
+      unique.set(key, candidate);
+    }
   });
 
   return Array.from(unique.values())
@@ -166,20 +178,22 @@ const buildChapterMetadataSummary = (document: DocumentRecord) => ({
   })),
 });
 
-const reviewTenderChapter = async (chapter: TenderChapter, document: DocumentRecord, regulations: Regulation[]) => {
+const reviewTenderChapter = async (
+  chapter: TenderChapter,
+  document: DocumentRecord,
+  regulations: Regulation[],
+  signal?: AbortSignal,
+) => {
   const regulationCandidates = buildRegulationCandidatesForChapter(chapter, regulations);
 
   return chapterReviewSchema.parse(
     await requestStructuredAiReview<unknown>({
       systemPrompt: [
-        "你是建设工程与政府采购领域的招标文件章节审查助手，同时具备招投标审计、造价工程、法律合规三方面经验。",
-        "你的核心原则是：证据优先、结论审慎、引用原文、保留不确定性。",
-        "你的任务是只针对当前章节进行综合初审，从法律合规、造价风控、项目管理三个维度识别潜在问题。",
-        "你必须重点关注以下风险：资格条件设置是否过高或过低、是否存在排斥潜在投标人的条件、评标办法或评分因素是否模糊或倾向性过强、保证金和工期及最高限价是否明显不合理、风险分配和费用承担是否存在争议、是否存在单方面不平等权利、是否存在时间节点冲突、占位符、空缺项、未明确字段和明显逻辑矛盾。",
-        "禁止行为：不能把当前章节未见写成整份文件缺失；不能在证据不足时直接下违法、无效、重大缺陷等重结论；不能编造页码、条款编号、法律依据或外部事实；不能输出空泛风险话术；不能为了凑数量输出问题。",
-        "风险分级规则：高风险=存在明显违法违规风险、明显限制竞争风险、重大履约或投诉风险；中风险=存在较明显争议、条款不合理、条件偏高、逻辑不清、需重点人工复核；低风险=轻微瑕疵、一般提醒、表述不清或证据不足以认定严重问题。",
-        "category 只能从：资格条件、评标办法、保证金条款、商务条款、技术条款、时间节点、文件完整性、其他 中选择。",
-        "输出要求：只审查当前章节；每条 finding 必须能追溯到 sourceChunkIds；如果引用法规必须填写 regulationChunkIds；references 只能引用输入中出现的文件名、章节名、法规名或片段标签；证据不足可以返回空 findings；只返回合法 JSON。",
+        "你是建设工程与政府采购场景的招标文件章节审查助手。",
+        "只针对当前章节进行初审，识别资格条件、评标办法、保证金、商务条款、技术条款、时间节点和文件完整性方面的问题。",
+        "只能依据输入片段与法规候选作出判断，不得编造页码、条文编号或外部法规。",
+        "证据不足时不要输出问题。",
+        "只返回合法 JSON。",
       ].join("\n"),
       userPrompt: JSON.stringify(
         {
@@ -187,6 +201,7 @@ const reviewTenderChapter = async (chapter: TenderChapter, document: DocumentRec
           chapter: {
             id: chapter.id,
             title: chapter.title,
+            pageRange: chapter.pageRange,
             chunks: chapter.chunks,
             text: chapter.text,
           },
@@ -205,7 +220,7 @@ const reviewTenderChapter = async (chapter: TenderChapter, document: DocumentRec
                 sourceChunkIds: ["string"],
                 regulationChunkIds: ["string"],
                 needsHumanReview: true,
-                confidence: 0.0,
+                confidence: 0,
               },
             ],
           },
@@ -213,6 +228,7 @@ const reviewTenderChapter = async (chapter: TenderChapter, document: DocumentRec
         null,
         2,
       ),
+      signal,
     }),
   );
 };
@@ -220,8 +236,8 @@ const reviewTenderChapter = async (chapter: TenderChapter, document: DocumentRec
 const buildCrossSectionPairs = (chapters: TenderChapter[]) => {
   const preferredPairs = [
     ["招标公告", "投标人须知"],
-    ["招标公告", "合同"],
-    ["投标人须知", "合同"],
+    ["招标公告", "合同条款"],
+    ["投标人须知", "合同条款"],
     ["技术", "评标"],
     ["工程量清单", "技术"],
   ];
@@ -231,7 +247,9 @@ const buildCrossSectionPairs = (chapters: TenderChapter[]) => {
   preferredPairs.forEach(([leftKeyword, rightKeyword]) => {
     const left = chapters.find((chapter) => chapter.title.includes(leftKeyword));
     const right = chapters.find((chapter) => chapter.title.includes(rightKeyword));
-    if (left && right) pairs.push({ a: left, b: right });
+    if (left && right) {
+      pairs.push({ a: left, b: right });
+    }
   });
 
   if (pairs.length === 0 && chapters.length >= 2) {
@@ -243,7 +261,7 @@ const buildCrossSectionPairs = (chapters: TenderChapter[]) => {
   return pairs;
 };
 
-const runCrossSectionScan = async (chapters: TenderChapter[], document: DocumentRecord) => {
+const runCrossSectionScan = async (chapters: TenderChapter[], document: DocumentRecord, signal?: AbortSignal) => {
   const pairs = buildCrossSectionPairs(chapters).map((pair) => ({
     chapterA: { title: pair.a.title, text: pair.a.text, chunkIds: pair.a.chunks.map((chunk) => chunk.id) },
     chapterB: { title: pair.b.title, text: pair.b.text, chunkIds: pair.b.chunks.map((chunk) => chunk.id) },
@@ -252,13 +270,11 @@ const runCrossSectionScan = async (chapters: TenderChapter[], document: Document
   return crossScanSchema.parse(
     await requestStructuredAiReview<unknown>({
       systemPrompt: [
-        "你是招标文件跨章节一致性审查助手，负责识别不同章节之间的冲突、不一致、逻辑矛盾和执行风险。",
-        "你的核心原则是：证据优先、结论审慎、不扩大推断、保留不确定性。",
-        "你的任务是仅基于输入中的章节对，识别招标公告、投标人须知、合同条款、技术要求、评标办法、工程量清单等章节之间的要求不一致、逻辑冲突、时间节点冲突和执行风险。",
-        "重点关注：招标公告与合同条款不一致、投标人须知与合同条款不一致、技术标准与评标因素不匹配、工程量清单与技术范围不一致、时间节点相互冲突、同一事项在不同章节表述不同且可能导致执行歧义。",
-        "禁止行为：不能把当前章节对未覆盖写成文件存在明确冲突；不能因为措辞不同就直接认定重大矛盾；不能编造未提供的章节内容、页码或法律依据；不能输出空泛一致性评价。",
-        "风险分级规则：高风险=存在明显冲突，可能导致投诉、流标、履约争议或严重影响招标执行；中风险=存在较明显不一致、歧义、前后口径不统一，需重点人工复核；低风险=轻微差异、表述层面的提醒。",
-        "输出要求：只判断输入中的章节对；每条 conflict 必须追溯到 sourceChunkIds；references 只能引用输入中出现的章节标题或片段标签；证据不足时可以返回空 conflicts；只返回合法 JSON。",
+        "你是招标文件跨章节一致性审查助手。",
+        "请识别不同章节之间的冲突、不一致、逻辑矛盾和执行风险。",
+        "只能依据输入章节对作出判断，不得编造缺失章节、页码或外部事实。",
+        "证据不足时返回空 conflicts。",
+        "只返回合法 JSON。",
       ].join("\n"),
       userPrompt: JSON.stringify(
         {
@@ -276,7 +292,7 @@ const runCrossSectionScan = async (chapters: TenderChapter[], document: Document
                 references: ["string"],
                 sourceChunkIds: ["string"],
                 needsHumanReview: true,
-                confidence: 0.0,
+                confidence: 0,
               },
             ],
             summary: "string",
@@ -285,6 +301,7 @@ const runCrossSectionScan = async (chapters: TenderChapter[], document: Document
         null,
         2,
       ),
+      signal,
     }),
   );
 };
@@ -294,7 +311,13 @@ export const generateTenderChapterAiFindings = async (params: {
   taskId: string;
   tenderDocument: DocumentRecord;
   regulations: Regulation[];
-  onProgress?: (payload: { current: number; total: number; chapterTitle: string; stage: "chapter_review" | "cross_scan" }) => void;
+  signal?: AbortSignal;
+  onProgress?: (payload: {
+    current: number;
+    total: number;
+    chapterTitle: string;
+    stage: "chapter_review" | "cross_scan";
+  }) => void;
 }): Promise<{ findings: Finding[] }> => {
   const chapters = extractTenderChapters(params.tenderDocument);
   if (chapters.length === 0) return { findings: [] };
@@ -308,7 +331,7 @@ export const generateTenderChapterAiFindings = async (params: {
       chapterTitle: chapter.title,
       stage: "chapter_review",
     });
-    chapterResults.push(await reviewTenderChapter(chapter, params.tenderDocument, params.regulations));
+    chapterResults.push(await reviewTenderChapter(chapter, params.tenderDocument, params.regulations, params.signal));
   }
 
   const chapterFindings = chapterResults.flatMap((result) =>
@@ -331,6 +354,7 @@ export const generateTenderChapterAiFindings = async (params: {
       confidence: finding.confidence,
       reviewStage: "chapter_review",
       scenario: "tender_compliance",
+      reviewLogs: [],
       createdAt: nowIso(),
     })),
   );
@@ -342,7 +366,11 @@ export const generateTenderChapterAiFindings = async (params: {
     stage: "cross_scan",
   });
 
-  const crossScan = await runCrossSectionScan(chapters, params.tenderDocument).catch(() => ({ conflicts: [], summary: "" }));
+  const crossScan = await runCrossSectionScan(chapters, params.tenderDocument, params.signal).catch(() => ({
+    conflicts: [],
+    summary: "",
+  }));
+
   const crossFindings = crossScan.conflicts.map<Finding>((conflict) => ({
     id: createId("finding"),
     projectId: params.projectId,
@@ -362,6 +390,7 @@ export const generateTenderChapterAiFindings = async (params: {
     confidence: conflict.confidence,
     reviewStage: "cross_section_review",
     scenario: "tender_compliance",
+    reviewLogs: [],
     createdAt: nowIso(),
   }));
 

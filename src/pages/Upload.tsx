@@ -37,9 +37,9 @@ type UploadRole = "tender" | "bid";
 const toDisplaySize = (sizeBytes: number) => `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
 
 const parseMethodLabel = (parseMethod: DocumentItem["parseMethod"]) => {
-  if (parseMethod === "pdf-text") return "PDF文本";
+  if (parseMethod === "pdf-text") return "PDF 文本";
   if (parseMethod === "plain-text") return "纯文本";
-  if (parseMethod === "image-ocr") return "图片OCR";
+  if (parseMethod === "image-ocr") return "图片 OCR";
   return "占位解析";
 };
 
@@ -130,6 +130,7 @@ const Upload = () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["findings"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
       toast({
         title: "审查任务已创建",
         description: `${result.task.name} 已进入审查队列。`,
@@ -155,6 +156,7 @@ const Upload = () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["findings"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
       toast({
         title: "审查任务已创建",
         description: `${result.task.name} 已进入审查队列。`,
@@ -210,7 +212,6 @@ const Upload = () => {
 
   useEffect(() => {
     if (!selectedProjectId || !reviewType || step !== "select") return;
-
     setStep(reviewType === "bid" ? "upload-bid" : "upload-tender-bid");
   }, [selectedProjectId, reviewType, step]);
 
@@ -225,9 +226,8 @@ const Upload = () => {
     }
   };
 
-  const projectDocuments = useMemo(() => documents, [documents]);
-  const tenderFiles = projectDocuments.filter((document) => document.role === "tender");
-  const bidFiles = projectDocuments.filter((document) => document.role === "bid");
+  const tenderFiles = useMemo(() => documents.filter((document) => document.role === "tender"), [documents]);
+  const bidFiles = useMemo(() => documents.filter((document) => document.role === "bid"), [documents]);
   const latestTender = tenderFiles[0];
   const latestBid = bidFiles[0];
 
@@ -252,7 +252,7 @@ const Upload = () => {
     if (status === "待解析") {
       return (
         <Badge variant="secondary">
-          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
           待解析
         </Badge>
       );
@@ -260,16 +260,16 @@ const Upload = () => {
 
     if (status === "解析中") {
       return (
-        <Badge variant="secondary" className="bg-warning/10 text-warning border-warning/20">
-          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+        <Badge variant="secondary" className="border-warning/20 bg-warning/10 text-warning">
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
           解析中
         </Badge>
       );
     }
 
     return (
-      <Badge variant="secondary" className="bg-success/10 text-success border-success/20">
-        <CheckCircle2 className="h-3 w-3 mr-1" />
+      <Badge variant="secondary" className="border-success/20 bg-success/10 text-success">
+        <CheckCircle2 className="mr-1 h-3 w-3" />
         已完成
       </Badge>
     );
@@ -303,16 +303,16 @@ const Upload = () => {
       <input
         ref={role === "tender" ? tenderInputRef : bidInputRef}
         type="file"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.md"
+        accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp"
         className="hidden"
         multiple
         onChange={(event) => handleFileUpload(event.target.files, role)}
       />
 
       <Card
-        className={`border-2 border-dashed transition-colors cursor-pointer ${
+        className={`cursor-pointer border-2 border-dashed transition-colors ${
           dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-        } ${!selectedProjectId ? "opacity-60 cursor-not-allowed" : ""}`}
+        } ${!selectedProjectId ? "cursor-not-allowed opacity-60" : ""}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -327,18 +327,18 @@ const Upload = () => {
         }}
       >
         <CardContent className="flex flex-col items-center justify-center py-16">
-          <div className="p-4 rounded-full bg-primary/10 mb-4">
+          <div className="mb-4 rounded-full bg-primary/10 p-4">
             <UploadIcon className="h-8 w-8 text-primary" />
           </div>
-          <p className="text-foreground font-medium">拖拽文件至此处或点击上传</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {selectedProjectId ? `上传${title}，支持 PDF、Word、Excel、图片` : "请先选择项目后再上传文件"}
+          <p className="font-medium text-foreground">拖拽文件到此处或点击上传</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {selectedProjectId ? `上传${title}，仅支持 PDF、文本和图片文件` : "请先选择项目后再上传文件"}
           </p>
         </CardContent>
       </Card>
 
       {uploadMutation.isPending && (
-        <div className="text-sm text-muted-foreground flex items-center gap-2">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           文件上传中...
         </div>
@@ -351,18 +351,15 @@ const Upload = () => {
           </CardHeader>
           <CardContent className="space-y-2">
             {files.map((file) => (
-              <div
-                key={file.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <FileText className="h-5 w-5 text-primary shrink-0" />
+              <div key={file.id} className="flex items-center justify-between rounded-lg bg-muted/50 p-3 transition-colors hover:bg-muted">
+                <div className="flex min-w-0 items-center gap-3">
+                  <FileText className="h-5 w-5 shrink-0 text-primary" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{file.originalName}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{file.originalName}</p>
                     <p className="text-xs text-muted-foreground">
                       {toDisplaySize(file.sizeBytes)} · {file.pageCount} 页 · {parseMethodLabel(file.parseMethod)}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{file.textPreview || "暂无解析摘要"}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{file.textPreview || "暂无解析摘要"}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -405,7 +402,7 @@ const Upload = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">文件审查</h1>
-          <p className="text-muted-foreground mt-1">请选择项目，系统将根据项目类型进入对应审查流程</p>
+          <p className="mt-1 text-muted-foreground">请选择项目，系统将根据项目类型进入对应的审查流程。</p>
         </div>
 
         {renderProjectSelector()}
@@ -422,13 +419,13 @@ const Upload = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">审查招标文件</h1>
-            <p className="text-muted-foreground mt-1">请上传需要审查的招标文件</p>
+            <p className="mt-1 text-muted-foreground">请上传需要审查的招标文件。</p>
           </div>
         </div>
 
         {renderProjectSelector()}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">{renderDropZone("tender", "招标文件", tenderFiles)}</div>
           <div>
             <Card className="border border-border shadow-sm">
@@ -436,14 +433,14 @@ const Upload = () => {
                 <CardTitle className="text-base">审查说明</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-xs text-muted-foreground p-3 rounded-lg bg-muted space-y-1">
-                  <p className="font-medium text-foreground mb-1">系统将自动检查</p>
+                <div className="space-y-1 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                  <p className="mb-1 font-medium text-foreground">系统将自动检查</p>
                   <ul className="space-y-1">
-                    <li>• 招标文件格式与完整性</li>
-                    <li>• 条款合规性审查</li>
-                    <li>• 评分标准合理性</li>
-                    <li>• 资质要求合法性</li>
-                    <li>• 关键时间节点校验</li>
+                    <li>· 招标文件格式与完整性</li>
+                    <li>· 条款合规性审查</li>
+                    <li>· 评分标准合理性</li>
+                    <li>· 资质要求合法性</li>
+                    <li>· 关键时间节点校验</li>
                   </ul>
                 </div>
                 <Button
@@ -476,7 +473,7 @@ const Upload = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">审查投标文件</h1>
-            <p className="text-muted-foreground mt-1">第 1 步：请先上传招标文件作为审查参照</p>
+            <p className="mt-1 text-muted-foreground">第 1 步：请先上传招标文件作为审查参照。</p>
           </div>
           <Badge variant="outline" className="ml-auto text-xs">
             步骤 1/2
@@ -485,7 +482,7 @@ const Upload = () => {
 
         {renderProjectSelector()}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">{renderDropZone("tender", "招标文件", tenderFiles)}</div>
           <div>
             <Card className="border border-border shadow-sm">
@@ -493,21 +490,21 @@ const Upload = () => {
                 <CardTitle className="text-base">流程说明</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     1
                   </div>
                   <p className="text-sm font-medium text-foreground">上传招标文件</p>
                 </div>
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
-                  <div className="h-6 w-6 rounded-full bg-muted-foreground/20 text-muted-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20 text-xs font-bold text-muted-foreground">
                     2
                   </div>
                   <p className="text-sm text-muted-foreground">上传投标文件</p>
                 </div>
                 <Button className="w-full" disabled={!latestTender} onClick={() => setStep("upload-tender-tender")}>
                   下一步
-                  <ArrowRight className="h-4 w-4 ml-1" />
+                  <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
@@ -525,7 +522,7 @@ const Upload = () => {
         </Button>
         <div>
           <h1 className="text-2xl font-bold text-foreground">审查投标文件</h1>
-          <p className="text-muted-foreground mt-1">第 2 步：请上传需要审查的投标文件</p>
+          <p className="mt-1 text-muted-foreground">第 2 步：请上传需要审查的投标文件。</p>
         </div>
         <Badge variant="outline" className="ml-auto text-xs">
           步骤 2/2
@@ -534,7 +531,7 @@ const Upload = () => {
 
       {renderProjectSelector()}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">{renderDropZone("bid", "投标文件", bidFiles)}</div>
         <div className="space-y-4">
           <Card className="border border-border shadow-sm">
@@ -542,8 +539,8 @@ const Upload = () => {
               <CardTitle className="text-base">流程说明</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-success/5 border border-success/20">
-                <div className="h-6 w-6 rounded-full bg-success text-success-foreground flex items-center justify-center text-xs font-bold shrink-0">
+              <div className="flex items-center gap-3 rounded-lg border border-success/20 bg-success/5 p-3">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success text-xs font-bold text-success-foreground">
                   ✓
                 </div>
                 <div>
@@ -551,8 +548,8 @@ const Upload = () => {
                   <p className="text-xs text-muted-foreground">{tenderFiles.length} 个文件</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
+              <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                   2
                 </div>
                 <p className="text-sm font-medium text-foreground">上传投标文件</p>

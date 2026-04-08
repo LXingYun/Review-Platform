@@ -1,5 +1,6 @@
 import { store } from "../store";
-import { FindingStatus, ReviewScenario } from "../types";
+import { FindingReviewLog, FindingStatus, ReviewScenario } from "../types";
+import { createId, nowIso } from "../utils";
 
 const mapDocumentChunkById = () => {
   const data = store.get();
@@ -37,6 +38,29 @@ const mapDocumentChunkById = () => {
   );
 
   return { data, documentChunkMap, regulationChunkMap };
+};
+
+const enrichFinding = (findingId: string) => {
+  const { data, documentChunkMap, regulationChunkMap } = mapDocumentChunkById();
+  const finding = data.findings.find((item) => item.id === findingId);
+
+  if (!finding) {
+    throw new Error("问题记录不存在");
+  }
+
+  return {
+    ...finding,
+    project: data.projects.find((project) => project.id === finding.projectId)?.name ?? "未知项目",
+    sourceChunks: finding.sourceChunkIds
+      .map((chunkId) => documentChunkMap.get(chunkId))
+      .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk)),
+    candidateChunks: finding.candidateChunkIds
+      .map((chunkId) => documentChunkMap.get(chunkId))
+      .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk)),
+    regulationChunks: finding.regulationChunkIds
+      .map((chunkId) => regulationChunkMap.get(chunkId))
+      .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk)),
+  };
 };
 
 export const listFindings = (params?: {
@@ -77,15 +101,52 @@ export const listFindings = (params?: {
     }));
 };
 
-export const updateFindingStatus = (findingId: string, status: FindingStatus) => {
+const createReviewLog = (params: {
+  action: FindingReviewLog["action"];
+  status?: FindingStatus;
+  note: string;
+  reviewer: string;
+}): FindingReviewLog => ({
+  id: createId("review-log"),
+  action: params.action,
+  status: params.status,
+  note: params.note,
+  reviewer: params.reviewer,
+  createdAt: nowIso(),
+});
+
+export const updateFindingStatus = (
+  findingId: string,
+  status: FindingStatus,
+  note?: string,
+  reviewer?: string,
+) => {
   let updated = false;
 
-  const next = store.update((current) => ({
+  store.update((current) => ({
     ...current,
     findings: current.findings.map((finding) => {
       if (finding.id !== findingId) return finding;
       updated = true;
-      return { ...finding, status };
+
+      const reviewLogs =
+        note && reviewer
+          ? [
+              createReviewLog({
+                action: status === "已确认" ? "confirm" : "ignore",
+                status,
+                note,
+                reviewer,
+              }),
+              ...finding.reviewLogs,
+            ]
+          : finding.reviewLogs;
+
+      return {
+        ...finding,
+        status,
+        reviewLogs,
+      };
     }),
   }));
 
@@ -93,20 +154,34 @@ export const updateFindingStatus = (findingId: string, status: FindingStatus) =>
     throw new Error("问题记录不存在");
   }
 
-  const { data, documentChunkMap, regulationChunkMap } = mapDocumentChunkById();
-  const finding = next.findings.find((item) => item.id === findingId)!;
+  return enrichFinding(findingId);
+};
 
-  return {
-    ...finding,
-    project: data.projects.find((project) => project.id === finding.projectId)?.name ?? "未知项目",
-    sourceChunks: finding.sourceChunkIds
-      .map((chunkId) => documentChunkMap.get(chunkId))
-      .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk)),
-    candidateChunks: finding.candidateChunkIds
-      .map((chunkId) => documentChunkMap.get(chunkId))
-      .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk)),
-    regulationChunks: finding.regulationChunkIds
-      .map((chunkId) => regulationChunkMap.get(chunkId))
-      .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk)),
-  };
+export const addFindingReviewLog = (findingId: string, note: string, reviewer: string) => {
+  let updated = false;
+
+  store.update((current) => ({
+    ...current,
+    findings: current.findings.map((finding) => {
+      if (finding.id !== findingId) return finding;
+      updated = true;
+      return {
+        ...finding,
+        reviewLogs: [
+          createReviewLog({
+            action: "comment",
+            note,
+            reviewer,
+          }),
+          ...finding.reviewLogs,
+        ],
+      };
+    }),
+  }));
+
+  if (!updated) {
+    throw new Error("问题记录不存在");
+  }
+
+  return enrichFinding(findingId);
 };

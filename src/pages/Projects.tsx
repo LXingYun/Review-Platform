@@ -24,9 +24,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiRequest } from "@/lib/api";
 import { ProjectListItem } from "@/lib/api-types";
 
-const statusStyle = (status: string) => {
+const statusStyle = (status: ProjectListItem["status"]) => {
   if (status === "进行中") return "bg-primary/10 text-primary border-primary/20";
   if (status === "已完成") return "bg-success/10 text-success border-success/20";
+  if (status === "未完成") return "bg-warning/10 text-warning border-warning/20";
   return "bg-muted text-muted-foreground border-border";
 };
 
@@ -66,6 +67,7 @@ const Projects = () => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 
@@ -74,12 +76,12 @@ const Projects = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">项目管理</h1>
-          <p className="text-muted-foreground mt-1">管理所有审查项目与任务</p>
+          <p className="mt-1 text-muted-foreground">管理审查项目、任务和问题数量</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               新建项目
             </Button>
           </DialogTrigger>
@@ -124,28 +126,20 @@ const Projects = () => {
       </div>
 
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="搜索项目..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
-        />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input placeholder="搜索项目..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
       </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">项目加载中...</p>}
       {isError && <p className="text-sm text-destructive">项目数据加载失败</p>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {projects.map((project) => (
-          <Card
-            key={project.id}
-            className="border border-border shadow-sm hover:shadow-md transition-shadow group"
-          >
+          <Card key={project.id} className="border border-border shadow-sm transition-shadow hover:shadow-md">
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
+                  <div className="rounded-lg bg-primary/10 p-2">
                     <FolderKanban className="h-5 w-5 text-primary" />
                   </div>
                   <div>
@@ -154,23 +148,21 @@ const Projects = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 mt-4">
+
+              <div className="mt-4 flex items-center gap-3">
                 <Badge variant="outline" className={statusStyle(project.status)}>
                   {project.status}
                 </Badge>
                 <span className="text-xs text-muted-foreground">{project.date}</span>
               </div>
-                <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                  <span>任务: {project.taskCount}</span>
-                  <span>问题: {project.issueCount}</span>
-                </div>
+
+              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <span>任务: {project.taskCount}</span>
+                <span>问题: {project.issueCount}</span>
+              </div>
+
               <div className="mt-4 flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => navigate(`/projects/${project.id}`)}
-                >
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/projects/${project.id}`)}>
                   查看详情
                 </Button>
                 <AlertDialog>
@@ -189,7 +181,7 @@ const Projects = () => {
                     <AlertDialogHeader>
                       <AlertDialogTitle>删除项目？</AlertDialogTitle>
                       <AlertDialogDescription>
-                        这会删除项目、任务、问题记录以及关联的已上传文件，且无法恢复。
+                        这会删除项目、任务、问题记录以及关联的上传文件，且无法恢复。
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

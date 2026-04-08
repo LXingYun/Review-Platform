@@ -43,7 +43,7 @@ const Regulations = () => {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("法规");
+  const [category, setCategory] = useState("法律");
   const [updated, setUpdated] = useState("");
   const [textPreview, setTextPreview] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -84,7 +84,7 @@ const Regulations = () => {
     onSuccess: () => {
       setOpen(false);
       setName("");
-      setCategory("法规");
+      setCategory("法律");
       setUpdated("");
       setTextPreview("");
       queryClient.invalidateQueries({ queryKey: ["regulations"] });
@@ -175,8 +175,7 @@ const Regulations = () => {
             ...current,
             sections: sections.map((section) => ({
               ...section,
-              rules:
-                current.chunks.filter((chunk) => (chunk.sectionId ?? current.sections[0]?.title) === section.title).length,
+              rules: current.chunks.filter((chunk) => (chunk.sectionId ?? current.sections[0]?.title) === section.title).length,
             })),
           }
         : current,
@@ -199,265 +198,267 @@ const Regulations = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">法规与规则管理</h1>
-          <p className="text-muted-foreground mt-1">管理审查所依据的法律法规与自定义规则</p>
+          <p className="mt-1 text-muted-foreground">管理审查依赖的法规、规则和支撑材料</p>
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
-                <Upload className="h-4 w-4 mr-2" />
+                <Upload className="mr-2 h-4 w-4" />
                 上传法规文件
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl">
               <DialogHeader>
                 <DialogTitle>上传法规文件</DialogTitle>
-                <DialogDescription>支持 PDF、图片、文本类法规文件，系统会自动识别文本并录入为法规条款。</DialogDescription>
+                <DialogDescription>支持 PDF、文本和图片类法规文件，系统会自动识别文本并整理入库。</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
                   <Label>法规文件</Label>
-                    <Input
-                      type="file"
-                      accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp"
-                      className="mt-1"
-                      onChange={(e) => {
-                        setUploadFile(e.target.files?.[0] ?? null);
-                        setDraft(null);
-                      }}
-                    />
-                  </div>
-                  {normalizedDraft && (
-                    <div className="space-y-4 rounded-lg border border-border p-4">
-                      {normalizedDraft.aiRefined?.applied && (
-                        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
-                          <p className="font-medium text-foreground">AI 已辅助精修本次法规草稿</p>
-                          <p className="text-muted-foreground mt-1">
-                            重点优化字段：
-                            {normalizedDraft.aiRefined.changedFields.length > 0
-                              ? ` ${normalizedDraft.aiRefined.changedFields.join("、")}`
-                              : " 无明显字段调整"}
-                          </p>
-                        </div>
-                      )}
-                      <div>
-                        <Label>法规名称</Label>
-                        <Input
-                          className="mt-1"
-                          value={normalizedDraft.name}
-                          onChange={(e) => setDraft((current) => current ? { ...current, name: e.target.value } : current)}
-                        />
+                  <Input
+                    type="file"
+                    accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp"
+                    className="mt-1"
+                    onChange={(e) => {
+                      setUploadFile(e.target.files?.[0] ?? null);
+                      setDraft(null);
+                    }}
+                  />
+                </div>
+
+                {normalizedDraft && (
+                  <div className="space-y-4 rounded-lg border border-border p-4">
+                    {normalizedDraft.aiRefined?.applied && (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                        <p className="font-medium text-foreground">AI 已辅助精修本次法规草稿</p>
+                        <p className="mt-1 text-muted-foreground">
+                          重点优化字段：
+                          {normalizedDraft.aiRefined.changedFields.length > 0
+                            ? ` ${normalizedDraft.aiRefined.changedFields.join("、")}`
+                            : " 无明显字段调整"}
+                        </p>
                       </div>
-                      <div>
-                        <Label>法规分类</Label>
-                        <Input
-                          className="mt-1"
-                          value={normalizedDraft.category}
-                          onChange={(e) => setDraft((current) => current ? { ...current, category: e.target.value } : current)}
-                        />
+                    )}
+
+                    <div>
+                      <Label>法规名称</Label>
+                      <Input
+                        className="mt-1"
+                        value={normalizedDraft.name}
+                        onChange={(e) => setDraft((current) => (current ? { ...current, name: e.target.value } : current))}
+                      />
+                    </div>
+
+                    <div>
+                      <Label>法规分类</Label>
+                      <Input
+                        className="mt-1"
+                        value={normalizedDraft.category}
+                        onChange={(e) => setDraft((current) => (current ? { ...current, category: e.target.value } : current))}
+                      />
+                    </div>
+
+                    <div>
+                      <Label>更新时间</Label>
+                      <Input
+                        className="mt-1"
+                        value={normalizedDraft.updated}
+                        onChange={(e) => setDraft((current) => (current ? { ...current, updated: e.target.value } : current))}
+                      />
+                    </div>
+
+                    <div>
+                      <Label>摘要</Label>
+                      <Textarea
+                        className="mt-1"
+                        value={normalizedDraft.textPreview}
+                        onChange={(e) => setDraft((current) => (current ? { ...current, textPreview: e.target.value } : current))}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <Label>章节结构</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            updateDraftSections([
+                              ...normalizedDraft.sections,
+                              {
+                                title: `新章节 ${normalizedDraft.sections.length + 1}`,
+                                rules: 0,
+                              },
+                            ])
+                          }
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          新增章节
+                        </Button>
                       </div>
-                      <div>
-                        <Label>更新时间</Label>
-                        <Input
-                          className="mt-1"
-                          value={normalizedDraft.updated}
-                          onChange={(e) => setDraft((current) => current ? { ...current, updated: e.target.value } : current)}
-                        />
-                      </div>
-                      <div>
-                        <Label>摘要</Label>
-                        <Textarea
-                          className="mt-1"
-                          value={normalizedDraft.textPreview}
-                          onChange={(e) => setDraft((current) => current ? { ...current, textPreview: e.target.value } : current)}
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <Label>章节结构</Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              updateDraftSections([
-                                ...normalizedDraft.sections,
-                                {
-                                  title: `新章节 ${normalizedDraft.sections.length + 1}`,
-                                  rules: 0,
-                                },
-                              ])
-                            }
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            新增章节
-                          </Button>
-                        </div>
-                        <div className="space-y-2 mt-2">
-                          {normalizedDraft.sections.map((section, index) => (
-                            <div key={`${section.title}-${index}`} className="rounded-lg border border-border p-3">
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  value={section.title}
-                                  onChange={(e) =>
-                                    updateDraftSections(
-                                      normalizedDraft.sections.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, title: e.target.value } : item,
-                                      ),
-                                    )
-                                  }
-                                />
-                                <Input
-                                  className="w-28"
-                                  value={String(section.rules)}
-                                  onChange={(e) =>
-                                    updateDraftSections(
-                                      normalizedDraft.sections.map((item, itemIndex) =>
-                                        itemIndex === index
-                                          ? {
-                                              ...item,
-                                              rules: Number.isNaN(Number(e.target.value)) ? 0 : Number(e.target.value),
-                                            }
-                                          : item,
-                                      ),
-                                    )
-                                  }
-                                />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    updateDraftSections(normalizedDraft.sections.filter((_, itemIndex) => itemIndex !== index))
-                                  }
-                                  disabled={normalizedDraft.sections.length === 1}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  删除
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <Label>条款条目</Label>
-                        <div className="mt-2 flex justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              updateDraftChunks([
-                               ...(normalizedDraft?.chunks ?? []),
-                                {
-                                  id: `manual-chunk-${Date.now()}`,
-                                  order: (normalizedDraft?.chunks.length ?? 0) + 1,
-                                  text: "",
-                                  sectionId: normalizedDraft.sections[0]?.title,
-                                },
-                              ])
-                            }
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            新增条目
-                          </Button>
-                        </div>
-                        <div className="space-y-2 mt-2 max-h-72 overflow-auto">
-                          {normalizedDraft.chunks.map((chunk, index) => (
-                            <div key={chunk.id} className="rounded-lg border border-border p-3">
-                              <div className="mb-2 flex items-center justify-between gap-2">
-                                <p className="text-xs text-muted-foreground">条目 {index + 1}</p>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => moveDraftChunk(index, index - 1)}
-                                    disabled={index === 0}
-                                  >
-                                    上移
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => moveDraftChunk(index, index + 1)}
-                                    disabled={index === normalizedDraft.chunks.length - 1}
-                                  >
-                                    下移
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      const nextChunks = normalizedDraft.chunks
-                                        .filter((_, itemIndex) => itemIndex !== index)
-                                        .map((item, itemIndex) => ({ ...item, order: itemIndex + 1 }));
-                                      updateDraftChunks(nextChunks);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    删除条目
-                                  </Button>
-                                </div>
-                              </div>
-                              <Textarea
-                                value={chunk.text}
+
+                      <div className="mt-2 space-y-2">
+                        {normalizedDraft.sections.map((section, index) => (
+                          <div key={`${section.title}-${index}`} className="rounded-lg border border-border p-3">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={section.title}
                                 onChange={(e) =>
-                                  updateDraftChunks(
-                                    normalizedDraft.chunks.map((item, itemIndex) =>
-                                      itemIndex === index ? { ...item, text: e.target.value } : item,
+                                  updateDraftSections(
+                                    normalizedDraft.sections.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, title: e.target.value } : item,
                                     ),
                                   )
                                 }
                               />
-                              <div className="mt-2">
-                                <Label className="text-xs text-muted-foreground">所属章节</Label>
-                                <select
-                                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                  value={chunk.sectionId ?? normalizedDraft.sections[0]?.title ?? ""}
-                                  onChange={(e) =>
-                                    updateDraftChunks(
-                                      normalizedDraft.chunks.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, sectionId: e.target.value } : item,
-                                      ),
-                                    )
-                                  }
-                                >
-                                  {normalizedDraft.sections.map((section) => (
-                                    <option key={section.title} value={section.title}>
-                                      {section.title}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
+                              <Input
+                                className="w-28"
+                                value={String(section.rules)}
+                                onChange={(e) =>
+                                  updateDraftSections(
+                                    normalizedDraft.sections.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? {
+                                            ...item,
+                                            rules: Number.isNaN(Number(e.target.value)) ? 0 : Number(e.target.value),
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  updateDraftSections(normalizedDraft.sections.filter((_, itemIndex) => itemIndex !== index))
+                                }
+                                disabled={normalizedDraft.sections.length === 1}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                删除
+                              </Button>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  )}
-                </div>
-                <DialogFooter>
-                  {!normalizedDraft ? (
-                    <Button onClick={() => uploadRegulationMutation.mutate()} disabled={!uploadFile || uploadRegulationMutation.isPending}>
-                      {uploadRegulationMutation.isPending ? "识别中..." : "上传并识别"}
-                    </Button>
-                  ) : (
-                    <Button onClick={() => confirmDraftMutation.mutate(normalizedDraft)} disabled={confirmDraftMutation.isPending}>
-                      {confirmDraftMutation.isPending ? "保存中..." : "确认入库"}
-                    </Button>
-                  )}
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+
+                    <div>
+                      <Label>条款条目</Label>
+                      <div className="mt-2 flex justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            updateDraftChunks([
+                              ...(normalizedDraft?.chunks ?? []),
+                              {
+                                id: `manual-chunk-${Date.now()}`,
+                                order: (normalizedDraft?.chunks.length ?? 0) + 1,
+                                text: "",
+                                sectionId: normalizedDraft.sections[0]?.title,
+                              },
+                            ])
+                          }
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          新增条目
+                        </Button>
+                      </div>
+                      <div className="mt-2 max-h-72 space-y-2 overflow-auto">
+                        {normalizedDraft.chunks.map((chunk, index) => (
+                          <div key={chunk.id} className="rounded-lg border border-border p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-xs text-muted-foreground">条目 {index + 1}</p>
+                              <div className="flex gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => moveDraftChunk(index, index - 1)} disabled={index === 0}>
+                                  上移
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => moveDraftChunk(index, index + 1)}
+                                  disabled={index === normalizedDraft.chunks.length - 1}
+                                >
+                                  下移
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const nextChunks = normalizedDraft.chunks
+                                      .filter((_, itemIndex) => itemIndex !== index)
+                                      .map((item, itemIndex) => ({ ...item, order: itemIndex + 1 }));
+                                    updateDraftChunks(nextChunks);
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  删除条目
+                                </Button>
+                              </div>
+                            </div>
+                            <Textarea
+                              value={chunk.text}
+                              onChange={(e) =>
+                                updateDraftChunks(
+                                  normalizedDraft.chunks.map((item, itemIndex) =>
+                                    itemIndex === index ? { ...item, text: e.target.value } : item,
+                                  ),
+                                )
+                              }
+                            />
+                            <div className="mt-2">
+                              <Label className="text-xs text-muted-foreground">所属章节</Label>
+                              <select
+                                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                value={chunk.sectionId ?? normalizedDraft.sections[0]?.title ?? ""}
+                                onChange={(e) =>
+                                  updateDraftChunks(
+                                    normalizedDraft.chunks.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, sectionId: e.target.value } : item,
+                                    ),
+                                  )
+                                }
+                              >
+                                {normalizedDraft.sections.map((section) => (
+                                  <option key={section.title} value={section.title}>
+                                    {section.title}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                {!normalizedDraft ? (
+                  <Button onClick={() => uploadRegulationMutation.mutate()} disabled={!uploadFile || uploadRegulationMutation.isPending}>
+                    {uploadRegulationMutation.isPending ? "识别中..." : "上传并识别"}
+                  </Button>
+                ) : (
+                  <Button onClick={() => confirmDraftMutation.mutate(normalizedDraft)} disabled={confirmDraftMutation.isPending}>
+                    {confirmDraftMutation.isPending ? "保存中..." : "确认入库"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="mr-2 h-4 w-4" />
                 添加法规
               </Button>
             </DialogTrigger>
@@ -473,11 +474,11 @@ const Regulations = () => {
                 </div>
                 <div>
                   <Label>法规分类</Label>
-                  <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="如 法律 / 行政法规 / 演示法规" className="mt-1" />
+                  <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="如：法律 / 行政法规 / 部门规章" className="mt-1" />
                 </div>
                 <div>
                   <Label>更新时间</Label>
-                  <Input value={updated} onChange={(e) => setUpdated(e.target.value)} placeholder="如 2024-01-01 或 手动录入" className="mt-1" />
+                  <Input value={updated} onChange={(e) => setUpdated(e.target.value)} placeholder="如：2024-01-01 或 手动录入" className="mt-1" />
                 </div>
                 <div>
                   <Label>条款摘要</Label>
@@ -485,10 +486,7 @@ const Regulations = () => {
                 </div>
               </div>
               <DialogFooter>
-                <Button
-                  onClick={() => createRegulationMutation.mutate()}
-                  disabled={!name || !textPreview || createRegulationMutation.isPending}
-                >
+                <Button onClick={() => createRegulationMutation.mutate()} disabled={!name || !textPreview || createRegulationMutation.isPending}>
                   {createRegulationMutation.isPending ? "保存中..." : "保存法规"}
                 </Button>
               </DialogFooter>
@@ -498,7 +496,7 @@ const Regulations = () => {
       </div>
 
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input placeholder="搜索法规..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
       </div>
 
@@ -512,14 +510,14 @@ const Regulations = () => {
               <Accordion type="single" collapsible>
                 <AccordionItem value={`reg-${regulation.id}`} className="border-0">
                   <AccordionTrigger className="px-5 py-4 hover:no-underline">
-                    <div className="flex items-center justify-between w-full gap-3 text-left pr-2">
+                    <div className="flex w-full items-center justify-between gap-3 pr-2 text-left">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
+                        <div className="rounded-lg bg-primary/10 p-2">
                           <BookOpen className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-foreground text-sm">{regulation.name}</h3>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <h3 className="text-sm font-semibold text-foreground">{regulation.name}</h3>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
                             <Badge variant="outline" className={`text-xs ${categoryColor(regulation.category)}`}>
                               {regulation.category}
                             </Badge>
@@ -529,65 +527,65 @@ const Regulations = () => {
                           </div>
                         </div>
                       </div>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={(e) => e.stopPropagation()}
-                            disabled={deleteRegulationMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>删除法规？</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              删除后该法规将不再参与后续审查候选匹配。
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>取消</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteRegulationMutation.mutate(regulation.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      <div className="flex items-center gap-2">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => e.stopPropagation()}
+                              disabled={deleteRegulationMutation.isPending}
                             >
-                              确认删除
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingRegulationId(regulation.id);
-                          setUploadOpen(true);
-                          setDraft({
-                            name: regulation.name,
-                            category: regulation.category,
-                            ruleCount: regulation.ruleCount,
-                            updated: regulation.updated,
-                            textPreview: regulation.textPreview,
-                            sections: regulation.sections,
-                            chunks: regulation.chunks.map((chunk) => ({
-                              ...chunk,
-                              sectionId: chunk.sectionTitle ?? regulation.sections[0]?.title,
-                            })),
-                          });
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>删除法规？</AlertDialogTitle>
+                              <AlertDialogDescription>删除后该法规将不再参与后续审查候选匹配。</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteRegulationMutation.mutate(regulation.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                确认删除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingRegulationId(regulation.id);
+                            setUploadOpen(true);
+                            setDraft({
+                              name: regulation.name,
+                              category: regulation.category,
+                              ruleCount: regulation.ruleCount,
+                              updated: regulation.updated,
+                              textPreview: regulation.textPreview,
+                              sections: regulation.sections,
+                              chunks: regulation.chunks.map((chunk) => ({
+                                ...chunk,
+                                sectionId: chunk.sectionTitle ?? regulation.sections[0]?.title,
+                              })),
+                            });
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-5 pb-4">
-                    <div className="space-y-3 ml-12">
-                      <p className="text-sm text-muted-foreground rounded-lg bg-muted p-3">{regulation.textPreview || "暂无摘要"}</p>
+                    <div className="ml-12 space-y-3">
+                      <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">{regulation.textPreview || "暂无摘要"}</p>
                       {regulation.sections.map((section) => (
                         <div key={`${regulation.id}-${section.title}`} className="rounded-lg border border-border bg-muted/40 p-3">
                           <div className="flex items-center justify-between">
@@ -601,9 +599,9 @@ const Regulations = () => {
                             {regulation.chunks
                               .filter((chunk) => (chunk.sectionTitle ?? regulation.sections[0]?.title) === section.title)
                               .map((chunk) => (
-                                <div key={chunk.id} className="rounded-lg bg-background p-3 border border-border">
+                                <div key={chunk.id} className="rounded-lg border border-border bg-background p-3">
                                   <p className="text-xs text-muted-foreground">片段 {chunk.order}</p>
-                                  <p className="text-sm text-foreground mt-1">{chunk.text}</p>
+                                  <p className="mt-1 text-sm text-foreground">{chunk.text}</p>
                                 </div>
                               ))}
                           </div>

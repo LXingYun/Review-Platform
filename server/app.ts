@@ -4,12 +4,20 @@ import multer from "multer";
 import { ZodError } from "zod";
 import { getDashboardSummary } from "./services/dashboard-service";
 import { saveUploadedDocument, listDocuments, deleteDocument } from "./services/document-service";
-import { listFindings, updateFindingStatus } from "./services/finding-service";
+import { addFindingReviewLog, listFindings, updateFindingStatus } from "./services/finding-service";
 import { createProject, deleteProject, listProjects } from "./services/project-service";
-import { createRegulation, deleteRegulation, importRegulationFromFile, listRegulations, previewRegulationFromFile, updateRegulation } from "./services/regulation-service";
-import { createReviewTask, deleteReviewTask, listTasks } from "./services/review-service";
+import {
+  createRegulation,
+  deleteRegulation,
+  importRegulationFromFile,
+  listRegulations,
+  previewRegulationFromFile,
+  updateRegulation,
+} from "./services/regulation-service";
+import { abortReviewTask, createReviewTask, deleteReviewTask, listTasks, retryReviewTask } from "./services/review-service";
 import {
   createBidReviewSchema,
+  createFindingReviewLogSchema,
   createProjectSchema,
   createRegulationSchema,
   createTenderReviewSchema,
@@ -55,7 +63,6 @@ export const createApp = () => {
     res.json(deleteDocument(req.params.documentId));
   });
 
-  // Upload is file-backed so the frontend can start using real multipart flows.
   app.post("/api/documents/upload", upload.single("file"), async (req, res) => {
     const input = uploadDocumentSchema.parse(req.body);
 
@@ -79,6 +86,14 @@ export const createApp = () => {
 
   app.delete("/api/review-tasks/:taskId", (req, res) => {
     res.json(deleteReviewTask(req.params.taskId));
+  });
+
+  app.post("/api/review-tasks/:taskId/retry", (req, res) => {
+    res.status(200).json(retryReviewTask(req.params.taskId));
+  });
+
+  app.post("/api/review-tasks/:taskId/abort", (req, res) => {
+    res.status(200).json(abortReviewTask(req.params.taskId));
   });
 
   app.post("/api/reviews/tender-compliance", async (req, res) => {
@@ -116,7 +131,12 @@ export const createApp = () => {
 
   app.patch("/api/findings/:findingId/status", (req, res) => {
     const input = updateFindingStatusSchema.parse(req.body);
-    res.json(updateFindingStatus(req.params.findingId, input.status));
+    res.json(updateFindingStatus(req.params.findingId, input.status, input.note, input.reviewer));
+  });
+
+  app.post("/api/findings/:findingId/review-log", (req, res) => {
+    const input = createFindingReviewLogSchema.parse(req.body);
+    res.json(addFindingReviewLog(req.params.findingId, input.note, input.reviewer));
   });
 
   app.get("/api/regulations", (req, res) => {

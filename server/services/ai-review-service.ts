@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { requestStructuredAiReview } from "./ai-client-service";
-import { BidFindingCategory, DocumentRecord, Finding, Regulation, ReviewScenario, TenderFindingCategory } from "../types";
+import {
+  BidFindingCategory,
+  DocumentRecord,
+  Finding,
+  Regulation,
+  ReviewScenario,
+  TenderFindingCategory,
+} from "../types";
 import { matchBidChunks } from "./bid-match-service";
 import { matchRegulationChunks } from "./regulation-match-service";
 import { createId, nowIso } from "../utils";
@@ -67,7 +74,7 @@ const buildTenderComplianceCandidates = (documents: DocumentRecord[], regulation
     regulationCandidates: matchRegulationChunks({
       sourceChunk,
       regulations,
-      preferredKeywords: ["保证金", "资格", "评标", "公平", "排斥", "限制"],
+      preferredKeywords: ["保证金", "资格", "资质", "评标", "评分", "公平", "排斥", "限制"],
       limit: 2,
     }).map((candidate) => ({
       regulationName: candidate.regulation.name,
@@ -110,21 +117,16 @@ const buildTenderCompliancePrompt = (documents: DocumentRecord[], regulations: R
   const candidates = buildTenderComplianceCandidates(documents, regulations);
 
   return {
-    systemPrompt:
-      [
-        "你是招标文件合规初审助手，负责基于招标文件候选片段和法规候选片段识别潜在合规问题。",
-        "你的结论仅用于初审和人工复核，不构成最终法律意见。",
-        "你只能依据输入中提供的招标片段和法规片段作出判断，不得引用未提供的法规、页码、章节或外部事实。",
-        "如果证据不足、依据不明确或候选片段无法支撑明确结论，则不要输出高风险结论；必要时可以不输出该问题。",
-        "只有在存在明确的潜在违法、违规、限制竞争、不合理门槛、明显冲突或明显缺失时才输出 finding，不要为了凑数量输出问题。",
-        "risk 分级规则：高=存在明显违法违规风险、明显限制竞争、或可能导致投诉/重大合规问题；中=存在较明显争议、条件偏高、条款不合理或需要重点复核；低=轻微瑕疵、表述不清或一般性提醒。",
-        "category 只能从以下枚举中选择：资格条件、评标办法、保证金条款、商务条款、技术条款、时间节点、文件完整性、其他。",
-        "location 必须基于 sourceChunkIds 对应的输入片段描述，不得编造页码；若无法定位页码，可写成“招标候选片段X”。",
-        "references 只能引用本次输入中出现的文件名、法规名或片段标签，不得生成输入之外的引用。",
-        "sourceChunkIds 必须填写实际支撑结论的招标片段 ID；regulationChunkIds 必须填写实际支撑结论的法规片段 ID；candidateChunkIds 在本场景下通常为空数组。",
-        "如果没有足够证据，请返回 {\"findings\": []}。",
-        "只返回合法 JSON，不要输出解释性文字。",
-      ].join("\n"),
+    systemPrompt: [
+      "你是招标文件合规初审助手，负责根据招标片段与法规片段识别潜在合规问题。",
+      "只能依据输入片段作出判断，不得引用外部事实，不得编造页码、章节或法规。",
+      "只有在证据足够支撑时才输出问题，证据不足时返回空 findings。",
+      "risk 规则：高=明显违法违规或明显限制竞争；中=存在较明显争议或需重点复核；低=轻微瑕疵或一般提醒。",
+      "category 只能从以下枚举中选择：资格条件、评标办法、保证金条款、商务条款、技术条款、时间节点、文件完整性、其他。",
+      "references 只能引用输入里出现的文件名、法规名或片段标签。",
+      "sourceChunkIds 和 regulationChunkIds 必须可追溯到输入片段。",
+      "只返回合法 JSON。",
+    ].join("\n"),
     userPrompt: JSON.stringify(
       {
         scenario: "tender_compliance",
@@ -133,30 +135,11 @@ const buildTenderCompliancePrompt = (documents: DocumentRecord[], regulations: R
           textPreview: tenderDocument?.textPreview,
         },
         candidatePairs: candidates,
-        reviewRules: {
-          objective: "识别招标文件中可能违法、违规、限制竞争、不合理或需重点复核的条款。",
-          evidencePrinciple: [
-            "只能根据提供的 sourceChunk 和 regulationCandidates 判断",
-            "证据不足时不要输出高风险结论",
-            "不能把推测写成确定事实",
-          ],
-          categoryEnum: ["资格条件", "评标办法", "保证金条款", "商务条款", "技术条款", "时间节点", "文件完整性", "其他"],
-          riskRules: {
-            high: "明显违法违规、明显限制竞争、或可能导致重大投诉/合规风险",
-            medium: "存在较明显争议、条件偏高、条款不合理、需重点人工复核",
-            low: "轻微瑕疵、一般性提醒、表述不清但证据不足以认定严重问题",
-          },
-          outputRequirements: [
-            "每条 finding 必须能从 sourceChunkIds 和 regulationChunkIds 追溯到输入片段",
-            "references 只写输入中出现的依据",
-            "如果没有明确问题，返回空 findings",
-          ],
-        },
         outputContract: {
           findings: [
             {
               title: "string",
-              category: "string",
+              category: "资格条件|评标办法|保证金条款|商务条款|技术条款|时间节点|文件完整性|其他",
               risk: "高|中|低",
               location: "string",
               description: "string",
@@ -166,7 +149,7 @@ const buildTenderCompliancePrompt = (documents: DocumentRecord[], regulations: R
               candidateChunkIds: ["string"],
               regulationChunkIds: ["string"],
               needsHumanReview: true,
-              confidence: 0.0,
+              confidence: 0,
             },
           ],
         },
@@ -183,21 +166,16 @@ const buildBidConsistencyPrompt = (documents: DocumentRecord[]) => {
   const candidates = buildBidConsistencyCandidates(documents);
 
   return {
-    systemPrompt:
-      [
-        "你是投标文件响应性初审助手，负责基于招标文件候选片段和投标文件候选片段识别响应不一致、遗漏、偏离或需重点复核的问题。",
-        "你的结论仅用于初审和人工复核，不构成最终废标或中标结论。",
-        "你只能依据输入中提供的招标片段和投标片段作出判断，不得推断未提供的附件、页码、章节或外部事实。",
-        "只有在存在明确的未响应、响应不完整、明显偏离、内容冲突或缺少响应证据时才输出 finding。",
-        "如果投标候选片段不足以判断，应避免下高风险结论；必要时可以不输出该问题。",
-        "risk 分级规则：高=可能构成实质性不响应、资格性缺失、重大技术/商务偏离；中=响应不完整、表述冲突、材料疑似缺失、需重点复核；低=轻微不一致、格式或表述层面的提醒。",
-        "category 只能从以下枚举中选择：资格响应、技术响应、商务响应、附件材料、偏离风险、时间节点、其他。",
-        "location 必须基于 sourceChunkIds 对应的招标片段描述，不得编造页码；若无法定位页码，可写成“招标候选片段X”。",
-        "references 只能引用本次输入中出现的文件名或片段标签。",
-        "sourceChunkIds 必须填写实际支撑结论的招标片段 ID；candidateChunkIds 必须填写支撑结论的投标片段 ID；regulationChunkIds 在本场景下通常为空数组。",
-        "如果没有足够证据，请返回 {\"findings\": []}。",
-        "只返回合法 JSON，不要输出解释性文字。",
-      ].join("\n"),
+    systemPrompt: [
+      "你是投标响应一致性初审助手，负责识别投标文件相对于招标要求的未响应、缺失、冲突或偏离。",
+      "只能依据输入片段作出判断，不得编造缺失附件、页码或外部事实。",
+      "只有在证据足够时才输出问题，证据不足时返回空 findings。",
+      "risk 规则：高=可能构成实质性不响应或重大偏离；中=响应不完整或需重点复核；低=轻微不一致或一般提醒。",
+      "category 只能从以下枚举中选择：资格响应、技术响应、商务响应、附件材料、偏离风险、时间节点、其他。",
+      "references 只能引用输入里出现的文件名或片段标签。",
+      "sourceChunkIds 和 candidateChunkIds 必须可追溯到输入片段。",
+      "只返回合法 JSON。",
+    ].join("\n"),
     userPrompt: JSON.stringify(
       {
         scenario: "bid_consistency",
@@ -210,30 +188,11 @@ const buildBidConsistencyPrompt = (documents: DocumentRecord[]) => {
           textPreview: bidDocument?.textPreview,
         },
         candidatePairs: candidates,
-        reviewRules: {
-          objective: "识别投标文件相对于招标要求的未响应、响应不完整、偏离、冲突或材料缺失问题。",
-          evidencePrinciple: [
-            "只能根据提供的 sourceChunk 和 bidCandidates 判断",
-            "不能把没有命中的片段直接当作确定缺失，除非候选证据明显不足",
-            "证据不足时不要输出高风险结论",
-          ],
-          categoryEnum: ["资格响应", "技术响应", "商务响应", "附件材料", "偏离风险", "时间节点", "其他"],
-          riskRules: {
-            high: "可能构成实质性不响应、资格性缺失、重大技术或商务偏离",
-            medium: "响应不完整、表述冲突、材料疑似缺失、需重点人工复核",
-            low: "轻微不一致、格式或措辞层面的提醒",
-          },
-          outputRequirements: [
-            "每条 finding 必须能从 sourceChunkIds 和 candidateChunkIds 追溯到输入片段",
-            "references 只写输入中出现的依据",
-            "如果没有明确问题，返回空 findings",
-          ],
-        },
         outputContract: {
           findings: [
             {
               title: "string",
-              category: "string",
+              category: "资格响应|技术响应|商务响应|附件材料|偏离风险|时间节点|其他",
               risk: "高|中|低",
               location: "string",
               description: "string",
@@ -243,7 +202,7 @@ const buildBidConsistencyPrompt = (documents: DocumentRecord[]) => {
               candidateChunkIds: ["string"],
               regulationChunkIds: ["string"],
               needsHumanReview: true,
-              confidence: 0.0,
+              confidence: 0,
             },
           ],
         },
@@ -260,6 +219,7 @@ export const generateAiScenarioFindings = async (params: {
   taskId: string;
   documents: DocumentRecord[];
   regulations: Regulation[];
+  signal?: AbortSignal;
 }) => {
   const prompts =
     params.scenario === "tender_compliance"
@@ -270,6 +230,7 @@ export const generateAiScenarioFindings = async (params: {
     await requestStructuredAiReview<unknown>({
       systemPrompt: prompts.systemPrompt,
       userPrompt: prompts.userPrompt,
+      signal: params.signal,
     }),
   );
 
@@ -277,8 +238,8 @@ export const generateAiScenarioFindings = async (params: {
     ...finding,
     category:
       params.scenario === "tender_compliance"
-        ? tenderCategoryEnum.parse(finding.category) satisfies TenderFindingCategory
-        : bidCategoryEnum.parse(finding.category) satisfies BidFindingCategory,
+        ? (tenderCategoryEnum.parse(finding.category) satisfies TenderFindingCategory)
+        : (bidCategoryEnum.parse(finding.category) satisfies BidFindingCategory),
   }));
 
   return parsedFindings.map<Finding>((finding) => ({
@@ -300,6 +261,7 @@ export const generateAiScenarioFindings = async (params: {
     confidence: finding.confidence,
     reviewStage: params.scenario === "bid_consistency" ? "response_consistency_review" : "chapter_review",
     scenario: params.scenario,
+    reviewLogs: [],
     createdAt: nowIso(),
   }));
 };

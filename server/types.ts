@@ -2,9 +2,9 @@ export type ReviewScenario = "tender_compliance" | "bid_consistency";
 
 export type ProjectReviewType = "招标审查" | "投标审查";
 
-export type ProjectStatus = "待开始" | "进行中" | "已完成";
+export type ProjectStatus = "待开始" | "进行中" | "已完成" | "未完成";
 
-export type ReviewTaskStatus = "待审查" | "进行中" | "已完成" | "失败";
+export type ReviewTaskStatus = "待审核" | "进行中" | "已完成" | "失败" | "未完成";
 
 export type RiskLevel = "高" | "中" | "低";
 
@@ -77,8 +77,18 @@ export interface ReviewTask {
   progress: number;
   riskLevel: RiskLevel;
   documentIds: string[];
+  attemptCount: number;
   createdAt: string;
   completedAt: string | null;
+}
+
+export interface FindingReviewLog {
+  id: string;
+  action: "comment" | "confirm" | "ignore";
+  status?: FindingStatus;
+  note: string;
+  reviewer: string;
+  createdAt: string;
 }
 
 export interface Finding {
@@ -100,6 +110,7 @@ export interface Finding {
   confidence: number;
   reviewStage: "chapter_review" | "cross_section_review" | "response_consistency_review";
   scenario: ReviewScenario;
+  reviewLogs: FindingReviewLog[];
   createdAt: string;
 }
 

@@ -3,7 +3,7 @@ import path from "node:path";
 import { store } from "../store";
 import { DocumentRecord, DocumentRole } from "../types";
 import { createId, extensionFromName, normalizeUploadedFileName, nowIso, sanitizeFileName } from "../utils";
-import { parseDocumentBuffer } from "./document-parse-service";
+import { isSupportedUpload, parseDocumentBuffer } from "./document-parse-service";
 
 const uploadDir = path.resolve(process.cwd(), "storage", "uploads");
 
@@ -31,6 +31,16 @@ export const saveUploadedDocument = async (params: {
 
   const normalizedOriginalName = normalizeUploadedFileName(params.file.originalname);
 
+  if (
+    !isSupportedUpload({
+      originalName: normalizedOriginalName,
+      mimeType: params.file.mimetype || "application/octet-stream",
+    })
+  ) {
+    throw new Error("仅支持 PDF、文本和图片文件上传");
+  }
+
+  const documentId = createId("doc");
   const extension = extensionFromName(normalizedOriginalName) || ".bin";
   const storedName = `${createId("file")}-${sanitizeFileName(normalizedOriginalName.replace(extension, ""))}${extension}`;
   const storedPath = path.join(uploadDir, storedName);
@@ -41,10 +51,11 @@ export const saveUploadedDocument = async (params: {
     originalName: normalizedOriginalName,
     mimeType: params.file.mimetype || "application/octet-stream",
     fileBuffer: params.file.buffer,
+    chunkIdPrefix: documentId,
   });
 
   const document: DocumentRecord = {
-    id: createId("doc"),
+    id: documentId,
     projectId: params.projectId,
     fileName: storedName,
     originalName: normalizedOriginalName,
