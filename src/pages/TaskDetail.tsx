@@ -119,6 +119,20 @@ const TaskDetail = () => {
     setReviewNote("");
   }, [selectedIssue?.id]);
 
+  useEffect(() => {
+    if (!selectedIssue) return;
+
+    const nextSelectedIssue = findings.find((finding) => finding.id === selectedIssue.id);
+    if (!nextSelectedIssue) {
+      setSelectedIssue(null);
+      return;
+    }
+
+    if (nextSelectedIssue !== selectedIssue) {
+      setSelectedIssue(nextSelectedIssue);
+    }
+  }, [findings, selectedIssue]);
+
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ["review-tasks", "all"],
     queryFn: () => apiRequest<ReviewTaskDetailItem[]>("/review-tasks"),
@@ -206,7 +220,8 @@ const TaskDetail = () => {
           reviewer: reviewerName,
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (updatedFinding) => {
+      setSelectedIssue(updatedFinding);
       setReviewNote("");
       queryClient.invalidateQueries({ queryKey: ["findings"] });
     },

@@ -1,5 +1,5 @@
 import { store } from "../store";
-import { Finding, ReviewScenario, ReviewTask } from "../types";
+import { AppData, Finding, ReviewScenario, ReviewTask } from "../types";
 import { getAiConfig } from "./ai-config-service";
 import { generateAiScenarioFindings } from "./ai-review-service";
 import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
@@ -8,7 +8,12 @@ import { createId, nowIso, summarizeRisk } from "../utils";
 const minimumVisibleDuration = 4500;
 const workerConcurrency = Math.max(1, Number(process.env.REVIEW_WORKER_CONCURRENCY ?? 2));
 
-const runningControllers = new Map<string, AbortController>();
+interface RunningTaskExecution {
+  attemptCount: number;
+  controller: AbortController;
+}
+
+const runningControllers = new Map<string, RunningTaskExecution>();
 
 let reviewWorkersStarted = false;
 let activeWorkers = 0;
@@ -31,9 +36,39 @@ const getReviewFailureMessage = (error: unknown) => {
 
 const getTaskById = (taskId: string) => store.get().reviewTasks.find((task) => task.id === taskId);
 
-const isTaskCancelled = (taskId: string) => {
+const isTaskCancelled = (taskId: string, attemptCount: number) => {
   const task = getTaskById(taskId);
-  return task?.status === "未完成" && task.stageLabel === "任务已中止";
+  return task?.attemptCount === attemptCount && task.status === "未完成" && task.stageLabel === "任务已中止";
+};
+
+const isTaskAttemptRunning = (taskId: string, attemptCount: number) => {
+  const task = getTaskById(taskId);
+  return task?.attemptCount === attemptCount && task.status === "进行中";
+};
+
+const updateTaskForAttempt = (
+  current: AppData,
+  taskId: string,
+  attemptCount: number,
+  updater: (task: ReviewTask) => ReviewTask | null,
+) => {
+  let updated = false;
+
+  const reviewTasks = current.reviewTasks.map((task) => {
+    if (task.id !== taskId || task.attemptCount !== attemptCount) {
+      return task;
+    }
+
+    const nextTask = updater(task);
+    if (!nextTask) {
+      return task;
+    }
+
+    updated = true;
+    return nextTask;
+  });
+
+  return updated ? { ...current, reviewTasks } : current;
 };
 
 const scheduleQueueDrain = () => {
@@ -79,77 +114,91 @@ const claimNextQueuedTask = () => {
   return claimedTaskId;
 };
 
-const markTaskFailed = (taskId: string, message: string) => {
-  store.update((current) => ({
-    ...current,
-    reviewTasks: current.reviewTasks.map((task) =>
-      task.id === taskId
-        ? {
-            ...task,
-            status: "失败",
-            stageLabel: message,
-            progress: 0,
-            completedAt: null,
-          }
-        : task,
-    ),
-  }));
+const markTaskFailed = (taskId: string, attemptCount: number, message: string) => {
+  store.update((current) =>
+    updateTaskForAttempt(current, taskId, attemptCount, (task) => {
+      if (task.status !== "进行中") {
+        return null;
+      }
+
+      return {
+        ...task,
+        status: "失败",
+        stageLabel: message,
+        progress: 0,
+        completedAt: null,
+      };
+    }),
+  );
 };
 
 const updateRunningTask = (
   taskId: string,
+  attemptCount: number,
   updater: (task: ReviewTask) => ReviewTask,
 ) => {
-  if (isTaskCancelled(taskId)) {
+  if (isTaskCancelled(taskId, attemptCount)) {
     return;
   }
 
-  store.update((current) => ({
-    ...current,
-    reviewTasks: current.reviewTasks.map((task) => {
-      if (task.id !== taskId) return task;
-      if (task.status !== "进行中") return task;
+  store.update((current) =>
+    updateTaskForAttempt(current, taskId, attemptCount, (task) => {
+      if (task.status !== "进行中") {
+        return null;
+      }
+
       return updater(task);
     }),
-  }));
+  );
 };
 
-const finalizeCancelledTask = (taskId: string) => {
-  store.update((current) => ({
-    ...current,
-    reviewTasks: current.reviewTasks.map((task) =>
-      task.id === taskId
-        ? {
-            ...task,
-            status: "未完成",
-            stageLabel: "任务已中止",
-            completedAt: null,
-          }
-        : task,
-    ),
-  }));
+const finalizeCancelledTask = (taskId: string, attemptCount: number) => {
+  store.update((current) =>
+    updateTaskForAttempt(current, taskId, attemptCount, (task) => {
+      if (task.status !== "未完成" || task.stageLabel !== "任务已中止") {
+        return null;
+      }
+
+      return {
+        ...task,
+        status: "未完成",
+        stageLabel: "任务已中止",
+        completedAt: null,
+      };
+    }),
+  );
+};
+
+const abortRunningTask = (taskId: string) => {
+  const execution = runningControllers.get(taskId);
+  execution?.controller.abort();
+  runningControllers.delete(taskId);
 };
 
 const runReviewTaskInBackground = async (taskId: string) => {
   const startedAt = Date.now();
   const task = getTaskById(taskId);
   if (!task) return;
+  const attemptCount = task.attemptCount;
 
   const data = store.get();
   const project = data.projects.find((item) => item.id === task.projectId);
   if (!project) {
-    markTaskFailed(taskId, "项目不存在");
+    markTaskFailed(taskId, attemptCount, "项目不存在");
     return;
   }
 
   const taskDocuments = data.documents.filter((document) => task.documentIds.includes(document.id));
   if (taskDocuments.length === 0) {
-    markTaskFailed(taskId, "审核任务缺少可用文档");
+    markTaskFailed(taskId, attemptCount, "审核任务缺少可用文档");
     return;
   }
 
-  const abortController = new AbortController();
-  runningControllers.set(taskId, abortController);
+  const execution: RunningTaskExecution = {
+    attemptCount,
+    controller: new AbortController(),
+  };
+  runningControllers.set(taskId, execution);
 
   try {
     const latest = store.get();
@@ -165,7 +214,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
     let findings: Finding[] = [];
 
     if (task.scenario === "tender_compliance") {
-      updateRunningTask(taskId, (currentTask) => ({
+      updateRunningTask(taskId, attemptCount, (currentTask) => ({
         ...currentTask,
         stageLabel: "进行章节级合规审查",
         progress: 45,
@@ -181,9 +230,9 @@ const runReviewTaskInBackground = async (taskId: string) => {
         taskId,
         tenderDocument,
         regulations: latest.regulations,
-        signal: abortController.signal,
+        signal: execution.controller.signal,
         onProgress: ({ current, total, chapterTitle, stage }) => {
-          updateRunningTask(taskId, (currentTask) => ({
+          updateRunningTask(taskId, attemptCount, (currentTask) => ({
             ...currentTask,
             stageLabel:
               stage === "chapter_review"
@@ -209,11 +258,11 @@ const runReviewTaskInBackground = async (taskId: string) => {
         taskId,
         documents: taskDocuments,
         regulations: latest.regulations,
-        signal: abortController.signal,
+        signal: execution.controller.signal,
       });
     }
 
-    if (isTaskCancelled(taskId)) {
+    if (!isTaskAttemptRunning(taskId, attemptCount)) {
       return;
     }
 
@@ -221,7 +270,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
     const elapsed = Date.now() - startedAt;
 
     if (elapsed < minimumVisibleDuration) {
-      updateRunningTask(taskId, (currentTask) => ({
+      updateRunningTask(taskId, attemptCount, (currentTask) => ({
         ...currentTask,
         stageLabel: "整合审查结果",
         progress: 80,
@@ -230,47 +279,62 @@ const runReviewTaskInBackground = async (taskId: string) => {
       await new Promise((resolve) => setTimeout(resolve, minimumVisibleDuration - elapsed));
     }
 
-    if (isTaskCancelled(taskId)) {
+    if (!isTaskAttemptRunning(taskId, attemptCount)) {
       return;
     }
 
-    store.update((current) => ({
-      ...current,
-      reviewTasks: current.reviewTasks.map((item) =>
-        item.id === taskId
-          ? {
-              ...item,
-              status: "已完成",
-              stageLabel: "审查完成",
-              progress: 100,
-              riskLevel,
-              completedAt: nowIso(),
-            }
-          : item,
-      ),
-      findings: [...current.findings.filter((item) => item.taskId !== taskId), ...findings],
-    }));
+    store.update((current) => {
+      const currentTask = current.reviewTasks.find((item) => item.id === taskId);
+      if (!currentTask || currentTask.attemptCount !== attemptCount || currentTask.status !== "进行中") {
+        return current;
+      }
+
+      return {
+        ...current,
+        reviewTasks: current.reviewTasks.map((item) =>
+          item.id === taskId
+            ? {
+                ...item,
+                status: "已完成",
+                stageLabel: "审查完成",
+                progress: 100,
+                riskLevel,
+                completedAt: nowIso(),
+              }
+            : item,
+        ),
+        findings: [...current.findings.filter((item) => item.taskId !== taskId), ...findings],
+      };
+    });
   } catch (error) {
-    if (isTaskCancelled(taskId) || isAbortError(error)) {
-      finalizeCancelledTask(taskId);
+    if (isTaskCancelled(taskId, attemptCount) || isAbortError(error)) {
+      finalizeCancelledTask(taskId, attemptCount);
       return;
     }
 
-    store.update((current) => ({
-      ...current,
-      reviewTasks: current.reviewTasks.map((item) =>
-        item.id === taskId
-          ? {
-              ...item,
-              status: "失败",
-              stageLabel: getReviewFailureMessage(error),
-              completedAt: null,
-            }
-          : item,
-      ),
-    }));
+    store.update((current) =>
+      updateTaskForAttempt(current, taskId, attemptCount, (currentTask) => {
+        if (currentTask.status !== "进行中") {
+          return null;
+        }
+
+        return {
+          ...currentTask,
+          status: "失败",
+          stageLabel: getReviewFailureMessage(error),
+          completedAt: null,
+        };
+      }),
+    );
   } finally {
-    runningControllers.delete(taskId);
+    const currentExecution = runningControllers.get(taskId);
+    if (
+      currentExecution &&
+      currentExecution.attemptCount === execution.attemptCount &&
+      currentExecution.controller === execution.controller
+    ) {
+      runningControllers.delete(taskId);
+    }
   }
 };
 
@@ -453,7 +517,7 @@ export const abortReviewTask = (taskId: string) => {
     };
   });
 
-  runningControllers.get(taskId)?.abort();
+  abortRunningTask(taskId);
   scheduleQueueDrain();
 
   return {
@@ -470,7 +534,7 @@ export const deleteReviewTask = (taskId: string) => {
     throw new Error("审核任务不存在");
   }
 
-  runningControllers.get(taskId)?.abort();
+  abortRunningTask(taskId);
 
   store.update((state) => ({
     ...state,
