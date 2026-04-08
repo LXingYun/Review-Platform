@@ -2,15 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Upload as UploadIcon,
-  FileText,
-  CheckCircle2,
-  Loader2,
   ArrowLeft,
   ArrowRight,
+  CheckCircle2,
+  FileText,
+  Loader2,
   Trash2,
+  Upload as UploadIcon,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -48,6 +48,24 @@ const reviewTypeFromProjectType = (projectType: ProjectListItem["type"]): Review
   if (projectType === "投标审查") return "tender";
   return null;
 };
+
+const stepCards = [
+  {
+    step: "01",
+    title: "选择项目",
+    description: "先确认本轮审查归属到哪个项目，再决定进入哪条工作流。",
+  },
+  {
+    step: "02",
+    title: "上传资料",
+    description: "招标或投标文件会在这里被归档、解析并进入后续审查流程。",
+  },
+  {
+    step: "03",
+    title: "创建任务",
+    description: "确认资料齐备后，系统会开始一次新的 AI 审查与人工复核链路。",
+  },
+];
 
 const Upload = () => {
   const queryClient = useQueryClient();
@@ -276,14 +294,15 @@ const Upload = () => {
   };
 
   const renderProjectSelector = () => (
-    <Card className="border border-border shadow-sm">
+    <Card className="surface-paper bg-white/78">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">选择项目</CardTitle>
+        <CardDescription>审查会继承项目类型，并自动进入对应的流程路径。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         <Label>当前审查任务所属项目</Label>
         <Select value={selectedProjectId} onValueChange={handleProjectChange}>
-          <SelectTrigger>
+          <SelectTrigger className="border-stone-300 bg-white/70">
             <SelectValue placeholder="请选择一个项目" />
           </SelectTrigger>
           <SelectContent>
@@ -299,7 +318,7 @@ const Upload = () => {
   );
 
   const renderDropZone = (role: UploadRole, title: string, files: DocumentItem[]) => (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <input
         ref={role === "tender" ? tenderInputRef : bidInputRef}
         type="file"
@@ -310,8 +329,8 @@ const Upload = () => {
       />
 
       <Card
-        className={`cursor-pointer border-2 border-dashed transition-colors ${
-          dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+        className={`surface-paper cursor-pointer overflow-hidden border-2 border-dashed bg-white/78 transition-all duration-200 ${
+          dragActive ? "border-[hsl(var(--accent))] bg-stone-50" : "border-stone-300/90 hover:-translate-y-0.5 hover:border-stone-400 hover:bg-white"
         } ${!selectedProjectId ? "cursor-not-allowed opacity-60" : ""}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -326,14 +345,19 @@ const Upload = () => {
           openPicker(role);
         }}
       >
-        <CardContent className="flex flex-col items-center justify-center py-16">
-          <div className="mb-4 rounded-full bg-primary/10 p-4">
-            <UploadIcon className="h-8 w-8 text-primary" />
+        <CardContent className="flex flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-900">
+            <UploadIcon className="h-7 w-7" />
           </div>
-          <p className="font-medium text-foreground">拖拽文件到此处或点击上传</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {selectedProjectId ? `上传${title}，仅支持 PDF、文本和图片文件` : "请先选择项目后再上传文件"}
+          <h3 className="font-display text-3xl text-stone-950">{title}</h3>
+          <p className="mt-3 max-w-xl text-sm leading-7 text-stone-600">
+            这里承接本轮审查的核心资料。你可以直接拖拽文件到卡片中，也可以点击手动选择上传。
           </p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            <Badge variant="outline">支持 PDF</Badge>
+            <Badge variant="outline">支持文本</Badge>
+            <Badge variant="outline">支持图片</Badge>
+          </div>
         </CardContent>
       </Card>
 
@@ -345,28 +369,31 @@ const Upload = () => {
       )}
 
       {files.length > 0 && (
-        <Card className="border border-border shadow-sm">
+        <Card className="surface-panel bg-white/74">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">已上传文件</CardTitle>
+            <CardTitle className="text-base">已上传资料</CardTitle>
+            <CardDescription>每个文件会保留摘要、页数和解析方式，便于你确认是否可进入下一步。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {files.map((file) => (
-              <div key={file.id} className="flex items-center justify-between rounded-lg bg-muted/50 p-3 transition-colors hover:bg-muted">
+              <div key={file.id} className="flex items-center justify-between rounded-[22px] border border-stone-200/90 bg-white/82 p-3 transition-colors hover:bg-white">
                 <div className="flex min-w-0 items-center gap-3">
-                  <FileText className="h-5 w-5 shrink-0 text-primary" />
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-stone-200 bg-stone-50 text-stone-800">
+                    <FileText className="h-5 w-5" />
+                  </div>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{file.originalName}</p>
+                    <p className="truncate text-sm font-medium text-stone-950">{file.originalName}</p>
                     <p className="text-xs text-muted-foreground">
                       {toDisplaySize(file.sizeBytes)} · {file.pageCount} 页 · {parseMethodLabel(file.parseMethod)}
                     </p>
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{file.textPreview || "暂无解析摘要"}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-6 text-stone-500">{file.textPreview || "暂无解析摘要"}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="ml-4 flex items-center gap-2">
                   {statusBadge(file.parseStatus)}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="icon" className="h-8 w-8" disabled={deleteDocumentMutation.isPending}>
+                      <Button variant="outline" size="icon" className="h-9 w-9 rounded-full border-stone-300 bg-white/80" disabled={deleteDocumentMutation.isPending}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
@@ -397,13 +424,49 @@ const Upload = () => {
     </div>
   );
 
+  const renderLead = (params: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    stepBadge?: string;
+  }) => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <span className="eyebrow">{params.eyebrow}</span>
+        {params.stepBadge && (
+          <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px] tracking-[0.18em] text-stone-500">
+            {params.stepBadge}
+          </Badge>
+        )}
+      </div>
+      <div className="max-w-3xl space-y-3">
+        <h1 className="font-display text-4xl leading-[1.08] text-stone-950 md:text-5xl">{params.title}</h1>
+        <p className="max-w-2xl text-base leading-8 text-stone-600">{params.description}</p>
+      </div>
+    </div>
+  );
+
   if (step === "select") {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">文件审查</h1>
-          <p className="mt-1 text-muted-foreground">请选择项目，系统将根据项目类型进入对应的审查流程。</p>
-        </div>
+      <div className="mx-auto max-w-5xl space-y-8 pb-10">
+        <section className="surface-paper rounded-[36px] px-6 py-8 md:px-10 md:py-10">
+          {renderLead({
+            eyebrow: "Review Entry",
+            title: "先选项目，再决定这轮审查要从哪条流程开始",
+            description:
+              "这一步只做两件事：确认项目归属，以及让系统自动判断你将进入招标审查还是投标审查流程。",
+          })}
+
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {stepCards.map((item) => (
+              <div key={item.step} className="rounded-[24px] border border-stone-200/90 bg-white/76 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-stone-500">{item.step}</p>
+                <h2 className="mt-3 text-base font-semibold text-stone-950">{item.title}</h2>
+                <p className="mt-2 text-sm leading-6 text-stone-600">{item.description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {renderProjectSelector()}
       </div>
@@ -412,53 +475,49 @@ const Upload = () => {
 
   if (step === "upload-bid") {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-6xl space-y-8 pb-10">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={handleBack}>
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">审查招标文件</h1>
-            <p className="mt-1 text-muted-foreground">请上传需要审查的招标文件。</p>
-          </div>
         </div>
+
+        {renderLead({
+          eyebrow: "Tender Review",
+          title: "把需要审查的招标文件放进工作台",
+          description: "上传后的文件会先完成解析，再进入招标文件合规审查与章节级风险检查。",
+        })}
 
         {renderProjectSelector()}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">{renderDropZone("tender", "招标文件", tenderFiles)}</div>
-          <div>
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">审查说明</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                  <p className="mb-1 font-medium text-foreground">系统将自动检查</p>
-                  <ul className="space-y-1">
-                    <li>· 招标文件格式与完整性</li>
-                    <li>· 条款合规性审查</li>
-                    <li>· 评分标准合理性</li>
-                    <li>· 资质要求合法性</li>
-                    <li>· 关键时间节点校验</li>
-                  </ul>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+          <div>{renderDropZone("tender", "上传招标文件", tenderFiles)}</div>
+          <Card className="surface-panel h-fit bg-white/74">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">本轮会检查什么</CardTitle>
+              <CardDescription>页面风格更克制，但功能还是会回到真实业务。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {["文件完整性", "条款合规性", "评标标准合理性", "资质要求合法性", "关键时间节点"].map((item) => (
+                <div key={item} className="rounded-[18px] border border-stone-200 bg-white/82 px-4 py-3 text-sm text-stone-700">
+                  {item}
                 </div>
-                <Button
-                  className="w-full"
-                  disabled={!latestTender || tenderReviewMutation.isPending}
-                  onClick={() =>
-                    latestTender &&
-                    tenderReviewMutation.mutate({
-                      projectId: selectedProjectId,
-                      tenderDocumentId: latestTender.id,
-                    })
-                  }
-                >
-                  {tenderReviewMutation.isPending ? "创建审查中..." : "开始审查"}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+              ))}
+              <Button
+                className="mt-3 w-full rounded-full"
+                disabled={!latestTender || tenderReviewMutation.isPending}
+                onClick={() =>
+                  latestTender &&
+                  tenderReviewMutation.mutate({
+                    projectId: selectedProjectId,
+                    tenderDocumentId: latestTender.id,
+                  })
+                }
+              >
+                {tenderReviewMutation.isPending ? "创建审查中..." : "开始审查"}
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -466,96 +525,76 @@ const Upload = () => {
 
   if (step === "upload-tender-bid") {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-6xl space-y-8 pb-10">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={handleBack}>
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">审查投标文件</h1>
-            <p className="mt-1 text-muted-foreground">第 1 步：请先上传招标文件作为审查参照。</p>
-          </div>
-          <Badge variant="outline" className="ml-auto text-xs">
-            步骤 1/2
-          </Badge>
         </div>
+
+        {renderLead({
+          eyebrow: "Bid Review",
+          title: "先放入招标文件，作为投标审查的参照底稿",
+          description: "投标文件不会被单独判断，它必须和招标要求放在同一轮审查上下文里。",
+          stepBadge: "步骤 1 / 2",
+        })}
 
         {renderProjectSelector()}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">{renderDropZone("tender", "招标文件", tenderFiles)}</div>
-          <div>
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">流程说明</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                    1
-                  </div>
-                  <p className="text-sm font-medium text-foreground">上传招标文件</p>
-                </div>
-                <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20 text-xs font-bold text-muted-foreground">
-                    2
-                  </div>
-                  <p className="text-sm text-muted-foreground">上传投标文件</p>
-                </div>
-                <Button className="w-full" disabled={!latestTender} onClick={() => setStep("upload-tender-tender")}>
-                  下一步
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+          <div>{renderDropZone("tender", "上传招标文件", tenderFiles)}</div>
+          <Card className="surface-panel h-fit bg-white/74">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">当前流程</CardTitle>
+              <CardDescription>这一轮改版会把流程表达得更像一条连续的入口链路。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-[18px] border border-stone-900/10 bg-stone-950 px-4 py-3 text-sm text-stone-50">01 上传招标文件</div>
+              <div className="rounded-[18px] border border-stone-200 bg-white/82 px-4 py-3 text-sm text-stone-500">02 上传投标文件</div>
+              <Button className="mt-3 w-full rounded-full" disabled={!latestTender} onClick={() => setStep("upload-tender-tender")}>
+                下一步
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-8 pb-10">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={handleBack}>
+        <Button variant="ghost" size="icon" className="rounded-full" onClick={handleBack}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">审查投标文件</h1>
-          <p className="mt-1 text-muted-foreground">第 2 步：请上传需要审查的投标文件。</p>
-        </div>
-        <Badge variant="outline" className="ml-auto text-xs">
-          步骤 2/2
-        </Badge>
       </div>
+
+      {renderLead({
+        eyebrow: "Bid Review",
+        title: "现在上传投标文件，形成完整的比对语境",
+        description: "招标要求已经在上一阶段归档完成。接下来这份投标文件会与其进行响应性和一致性审查。",
+        stepBadge: "步骤 2 / 2",
+      })}
 
       {renderProjectSelector()}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">{renderDropZone("bid", "投标文件", bidFiles)}</div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+        <div>{renderDropZone("bid", "上传投标文件", bidFiles)}</div>
         <div className="space-y-4">
-          <Card className="border border-border shadow-sm">
+          <Card className="surface-panel bg-white/74">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">流程说明</CardTitle>
+              <CardTitle className="text-base">流程摘要</CardTitle>
+              <CardDescription>你已经完成审查前的上下文准备。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center gap-3 rounded-lg border border-success/20 bg-success/5 p-3">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success text-xs font-bold text-success-foreground">
-                  ✓
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">招标文件已上传</p>
-                  <p className="text-xs text-muted-foreground">{tenderFiles.length} 个文件</p>
-                </div>
+              <div className="rounded-[18px] border border-success/20 bg-success/5 px-4 py-3">
+                <p className="text-sm font-medium text-stone-950">招标文件已就绪</p>
+                <p className="mt-1 text-xs text-stone-500">{tenderFiles.length} 个文件</p>
               </div>
-              <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                  2
-                </div>
-                <p className="text-sm font-medium text-foreground">上传投标文件</p>
-              </div>
+              <div className="rounded-[18px] border border-stone-900/10 bg-stone-950 px-4 py-3 text-sm text-stone-50">02 上传投标文件</div>
               <Button
-                className="w-full"
+                className="mt-3 w-full rounded-full"
                 disabled={!latestTender || !latestBid || bidReviewMutation.isPending}
                 onClick={() =>
                   latestTender &&

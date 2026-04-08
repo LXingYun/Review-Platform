@@ -3,11 +3,11 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
-  Building2,
   CheckCircle2,
   Clock3,
   FileSearch,
   FolderKanban,
+  Scale,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -29,58 +29,58 @@ const statIcons = {
 
 const quickActions = [
   {
-    title: "发起文件审查",
-    description: "上传 PDF、文本或图片文件，进入招标/投标审查流程。",
+    title: "发起一轮审查",
+    description: "从上传资料开始，把招标或投标文件送进新的审查流程。",
     href: "/upload",
     icon: FileSearch,
   },
   {
-    title: "查看项目池",
-    description: "统一管理项目、任务与审查进度。",
+    title: "浏览项目池",
+    description: "查看正在推进的项目、任务状态和需要继续跟进的条目。",
     href: "/projects",
     icon: FolderKanban,
   },
   {
-    title: "维护法规库",
-    description: "查看法规条文、更新基础规则和支撑材料。",
+    title: "维护法规依据",
+    description: "补充法规文本、规则条款和支撑材料，维持审查底座。",
     href: "/regulations",
     icon: BookOpen,
   },
 ];
 
-const capabilityPanels = [
+const editorialNotes = [
   {
-    title: "审查状态一屏掌握",
-    description: "把任务、风险、结果和后续动作集中到一个首页视图。",
+    title: "更安静的工作台",
+    description: "让进入系统后的第一眼先看到要做什么，而不是被视觉噪音打断。",
     icon: ShieldCheck,
   },
   {
-    title: "AI 审查主链路",
-    description: "上传、抽取、审查和结果回显都由统一的 AI 审查链路驱动。",
-    icon: Sparkles,
+    title: "以复核为中心",
+    description: "所有入口最终都指向任务、问题和复核动作，避免信息散落。",
+    icon: Scale,
   },
   {
-    title: "聚焦待办和异常",
-    description: "优先暴露进行中、失败和未完成任务，减少状态遗漏。",
-    icon: Building2,
+    title: "保留业务密度",
+    description: "不牺牲项目管理和任务跟踪能力，只把表达方式改得更克制。",
+    icon: Sparkles,
   },
 ];
 
 const processSteps = [
   {
     step: "01",
-    title: "上传资料",
-    description: "把招标文件或投标文件拖入平台，完成解析与归档。",
+    title: "归档资料",
+    description: "先选项目，再上传招标文件、投标文件或补充材料。",
   },
   {
     step: "02",
-    title: "AI 审查",
-    description: "系统按章节推进审查，识别高风险条款和一致性问题。",
+    title: "生成审查任务",
+    description: "系统把文档解析、抽取和 AI 审查编排成一条连续流程。",
   },
   {
     step: "03",
-    title: "复核输出",
-    description: "在任务详情中查看问题清单、补充备注并完成复核。",
+    title: "进入人工复核",
+    description: "在任务详情中查看风险、补充备注，并完成最终判断。",
   },
 ];
 
@@ -92,7 +92,7 @@ const riskBadgeVariant = (risk: string) => {
 
 const statusTone = (status: string) => {
   if (status === "已完成") return "text-success";
-  if (status === "进行中") return "text-primary";
+  if (status === "进行中") return "text-stone-900";
   if (status === "失败" || status === "未完成") return "text-destructive";
   return "text-muted-foreground";
 };
@@ -108,37 +108,36 @@ const Dashboard = () => {
   const recentTasks = data?.recentTasks ?? [];
 
   return (
-    <div className="space-y-8 pb-6">
-      <section className="relative overflow-hidden rounded-[32px] border border-sky-100 bg-white px-6 py-8 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] md:px-8">
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(240,249,255,0.95),rgba(255,255,255,0.9),rgba(239,246,255,0.85))]" />
-        <div className="absolute -left-20 top-0 h-56 w-56 rounded-full bg-sky-100/70 blur-3xl" />
-        <div className="absolute -right-16 top-10 h-64 w-64 rounded-full bg-cyan-100/70 blur-3xl" />
-        <div className="absolute bottom-0 right-24 h-32 w-32 rounded-full bg-amber-100/60 blur-2xl" />
+    <div className="space-y-10 pb-8">
+      <section className="surface-paper relative overflow-hidden rounded-[36px] px-6 py-8 md:px-10 md:py-10">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-stone-400/50 to-transparent" />
+        <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(188,149,92,0.14),transparent_68%)]" />
+        <div className="absolute left-0 top-20 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.5),transparent_70%)]" />
 
-        <div className="relative grid gap-8 xl:grid-cols-5">
-          <div className="space-y-6 xl:col-span-3">
-            <Badge variant="outline" className="rounded-full border-sky-200 bg-sky-50 px-4 py-1 text-sky-700">
-              招投标文件智能审查平台
-            </Badge>
-
-            <div className="max-w-3xl space-y-4">
-              <h1 className="text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
-                审查任务、风险线索与
-                <span className="block text-sky-700">复核输出一屏掌握</span>
-              </h1>
-              <p className="max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
-                首页聚焦上传发起、任务进展、问题跟踪与结果输出，让进入系统后的第一眼先看到当前状态、待办事项和关键结果。
-              </p>
+        <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_360px]">
+          <div className="space-y-7">
+            <div className="space-y-4">
+              <span className="eyebrow">AI Review Workspace</span>
+              <div className="max-w-4xl space-y-4">
+                <h1 className="font-display text-4xl leading-[1.05] text-stone-950 md:text-6xl">
+                  把招投标审查
+                  <span className="block text-[hsl(var(--accent))]">变成一条连续、可复核的工作流</span>
+                </h1>
+                <p className="max-w-2xl text-base leading-8 text-stone-600 md:text-lg">
+                  这里不是传统的数据大盘，而是一张更安静的工作台首页。上传资料、推进任务、查看风险，再回到人工复核，
+                  每一步都在同一个语境里完成。
+                </p>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Button asChild size="lg" className="h-12 rounded-full px-6 shadow-lg shadow-sky-200/70">
+              <Button asChild size="lg" className="h-12 rounded-full px-6 shadow-[0_18px_34px_-22px_rgba(28,25,23,0.6)]">
                 <Link to="/upload">
                   立即发起审查
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="h-12 rounded-full border-slate-200 px-6">
+              <Button asChild variant="outline" size="lg" className="h-12 rounded-full border-stone-300 bg-white/60 px-6 hover:bg-white">
                 <Link to="/projects">
                   查看项目池
                   <ArrowUpRight className="h-4 w-4" />
@@ -146,159 +145,186 @@ const Dashboard = () => {
               </Button>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-3">
-              {capabilityPanels.map((panel) => (
-                <div
-                  key={panel.title}
-                  className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] backdrop-blur-sm transition-transform duration-300 hover:-translate-y-0.5"
-                >
-                  <div className="mb-3 inline-flex rounded-2xl bg-sky-100 p-3 text-sky-700">
-                    <panel.icon className="h-5 w-5" />
+            <div className="grid gap-3 md:grid-cols-3">
+              {editorialNotes.map((note) => (
+                <div key={note.title} className="rounded-[24px] border border-stone-200/90 bg-white/72 p-4">
+                  <div className="mb-4 inline-flex rounded-full border border-stone-200 bg-stone-100/80 p-2.5 text-stone-700">
+                    <note.icon className="h-4 w-4" />
                   </div>
-                  <h2 className="text-base font-semibold text-slate-900">{panel.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{panel.description}</p>
+                  <h2 className="text-base font-semibold text-stone-900">{note.title}</h2>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">{note.description}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-[28px] bg-slate-950 p-6 text-slate-50 shadow-[0_30px_80px_-40px_rgba(2,6,23,0.8)] xl:col-span-2">
-            <div className="flex items-center justify-between">
+          <div className="rounded-[30px] border border-stone-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,244,236,0.9))] p-5 shadow-[0_18px_34px_-28px_rgba(28,25,23,0.4)]">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-sky-200">实时运行概况</p>
-                <h2 className="mt-2 text-2xl font-semibold">审查中心总览</h2>
+                <p className="text-sm text-stone-500">今日视图</p>
+                <h2 className="mt-2 font-display text-3xl text-stone-950">工作台总览</h2>
               </div>
-              <div className="rounded-full border border-white/10 bg-white/10 p-3 text-sky-200">
-                <Sparkles className="h-5 w-5" />
+              <div className="rounded-full bg-stone-950 p-2.5 text-stone-50">
+                <Sparkles className="h-4 w-4" />
               </div>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 space-y-3">
               {isLoading &&
-                Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="h-3 w-20 rounded-full bg-white/10" />
-                    <div className="mt-3 h-7 w-16 rounded-full bg-white/10" />
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="rounded-[22px] border border-stone-200 bg-white/70 p-4">
+                    <div className="h-3 w-24 rounded-full bg-stone-200/80" />
+                    <div className="mt-3 h-7 w-16 rounded-full bg-stone-200/80" />
                   </div>
                 ))}
 
               {!isLoading &&
-                stats.map((stat) => {
+                stats.slice(0, 3).map((stat) => {
                   const Icon = statIcons[stat.label as keyof typeof statIcons] ?? FolderKanban;
 
                   return (
-                    <div key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-                      <div className="flex items-start justify-between gap-4">
+                    <div key={stat.label} className="rounded-[22px] border border-stone-200 bg-white/70 p-4">
+                      <div className="flex items-center justify-between gap-4">
                         <div>
-                          <p className="text-sm text-slate-300">{stat.label}</p>
-                          <p className="mt-2 text-3xl font-semibold text-white">{stat.value}</p>
+                          <p className="text-sm text-stone-500">{stat.label}</p>
+                          <p className="mt-2 text-3xl font-semibold tracking-tight text-stone-950">{stat.value}</p>
                         </div>
-                        <div className="rounded-2xl bg-sky-400/10 p-3 text-sky-300">
-                          <Icon className="h-5 w-5" />
+                        <div className="rounded-full border border-stone-200 bg-stone-50 p-3 text-stone-700">
+                          <Icon className="h-4 w-4" />
                         </div>
                       </div>
                     </div>
                   );
                 })}
             </div>
+
+            <div className="mt-5 rounded-[22px] border border-stone-200 bg-stone-950 px-4 py-4 text-stone-50">
+              <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Flow</p>
+              <p className="mt-2 text-sm leading-7 text-stone-200">
+                首页负责指路，任务详情负责落地。你可以把这里理解成一张前台安静、后台高效的审查入口页。
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-12">
-        <Card className="rounded-[28px] border-slate-200/80 bg-white shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] xl:col-span-5">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl text-slate-900">首页快捷区</CardTitle>
-            <CardDescription className="text-sm leading-6 text-slate-500">
-              用更明确的入口组织首页，让首次进入的用户快速理解平台怎么用。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-3">
-              {quickActions.map((action) => (
-                <Link
-                  key={action.title}
-                  to={action.href}
-                  className="group rounded-2xl border border-slate-200 bg-slate-50/80 p-4 transition-all duration-300 hover:border-sky-200 hover:bg-sky-50"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="rounded-2xl bg-white p-3 text-sky-700 shadow-sm">
-                      <action.icon className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-base font-semibold text-slate-900">{action.title}</h3>
-                        <ArrowUpRight className="h-4 w-4 text-slate-400 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-sky-700" />
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">{action.description}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {isLoading &&
+          Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index} className="bg-white/72">
+              <CardContent className="p-5">
+                <div className="h-3 w-20 rounded-full bg-stone-200/80" />
+                <div className="mt-4 h-8 w-16 rounded-full bg-stone-200/80" />
+              </CardContent>
+            </Card>
+          ))}
 
-            <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fbff)] p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900">建议使用流程</h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">把首页从“看数据”升级成“看状态 + 直接行动”。</p>
-                </div>
-                <div className="rounded-2xl bg-amber-50 p-3 text-amber-600">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-              </div>
+        {!isLoading &&
+          stats.map((stat) => {
+            const Icon = statIcons[stat.label as keyof typeof statIcons] ?? FolderKanban;
 
-              <div className="mt-5 space-y-3">
-                {processSteps.map((item) => (
-                  <div key={item.step} className="flex gap-4 rounded-2xl border border-slate-200/80 bg-white p-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sm font-semibold text-sky-700">
-                      {item.step}
-                    </div>
+            return (
+              <Card key={stat.label} className="bg-white/72">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-900">{item.title}</h4>
-                      <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
+                      <p className="text-sm text-stone-500">{stat.label}</p>
+                      <p className="mt-3 text-3xl font-semibold tracking-tight text-stone-950">{stat.value}</p>
+                    </div>
+                    <div className="rounded-full border border-stone-200 bg-stone-50 p-3 text-stone-700">
+                      <Icon className="h-4 w-4" />
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="bg-white/72">
+          <CardHeader className="pb-5">
+            <CardTitle className="font-display text-[30px] text-stone-950">主要入口</CardTitle>
+            <CardDescription>先决定你要做哪件事，再进入对应流程。减少导航噪音，让首屏更像入口而不是说明书。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {quickActions.map((action) => (
+              <Link
+                key={action.title}
+                to={action.href}
+                className="group flex items-start gap-4 rounded-[24px] border border-stone-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(247,242,233,0.88))] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_16px_24px_-22px_rgba(28,25,23,0.38)]"
+              >
+                <div className="rounded-[18px] border border-stone-200 bg-white/90 p-3 text-stone-800">
+                  <action.icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-base font-semibold text-stone-950">{action.title}</h3>
+                    <ArrowUpRight className="h-4 w-4 text-stone-400 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-stone-900" />
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">{action.description}</p>
+                </div>
+              </Link>
+            ))}
           </CardContent>
         </Card>
 
-        <Card className="rounded-[28px] border-slate-200/80 bg-white shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] xl:col-span-7">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <CardTitle className="text-xl text-slate-900">最近审查任务</CardTitle>
-                <CardDescription className="mt-1 text-sm leading-6 text-slate-500">
-                  保留任务追踪能力，但把状态、风险和进度压到更直观的卡片里。
-                </CardDescription>
+        <Card className="bg-white/72">
+          <CardHeader className="pb-5">
+            <CardTitle className="font-display text-[30px] text-stone-950">使用节奏</CardTitle>
+            <CardDescription>把上传、AI 审查和人工复核串成一条连续的工作流，减少来回切换成本。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {processSteps.map((item) => (
+              <div key={item.step} className="rounded-[24px] border border-stone-200/90 bg-white/82 p-4">
+                <div className="flex gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-stone-50 text-sm font-semibold text-stone-900">
+                    {item.step}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-stone-950">{item.title}</h4>
+                    <p className="mt-2 text-sm leading-6 text-stone-600">{item.description}</p>
+                  </div>
+                </div>
               </div>
-              <Button asChild variant="outline" className="rounded-full border-slate-200">
+            ))}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section>
+        <Card className="bg-white/72">
+          <CardHeader className="pb-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <CardTitle className="font-display text-[32px] text-stone-950">最近审查任务</CardTitle>
+                <CardDescription>仍然保留任务密度，但用更平静的版式承载状态、风险和进度。</CardDescription>
+              </div>
+              <Button asChild variant="outline" className="w-fit rounded-full border-stone-300 bg-white/70 hover:bg-white">
                 <Link to="/projects">
-                  查看全部
+                  查看全部任务
                   <ArrowUpRight className="h-4 w-4" />
                 </Link>
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {isError && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+              <div className="rounded-[24px] border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 仪表盘数据加载失败，请刷新后重试。
               </div>
             )}
 
             {!isError && !isLoading && recentTasks.length === 0 && (
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+              <div className="rounded-[26px] border border-dashed border-stone-300 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(246,241,233,0.82))] p-8 text-center">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-stone-200 bg-white/90 text-stone-800">
                   <FileSearch className="h-6 w-6" />
                 </div>
-                <h3 className="text-base font-semibold text-slate-900">还没有审查任务</h3>
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  可以直接从首页发起文件审查，系统会把任务、风险和问题清单自动串起来。
+                <h3 className="font-display text-2xl text-stone-950">还没有审查任务</h3>
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-stone-600">
+                  从上传资料开始，会自动进入任务编排和风险输出。首页不再强调炫技，而是把最短路径放到最前面。
                 </p>
-                <Button asChild className="mt-5 rounded-full px-5">
+                <Button asChild className="mt-5 rounded-full px-6">
                   <Link to="/upload">
                     去上传文件
                     <ArrowRight className="h-4 w-4" />
@@ -307,31 +333,31 @@ const Dashboard = () => {
               </div>
             )}
 
-            <div className="space-y-3">
-              {recentTasks.map((task) => (
+            {!isError &&
+              recentTasks.map((task) => (
                 <button
                   key={task.id}
                   type="button"
                   onClick={() => navigate(`/tasks/${task.id}`)}
-                  className="w-full rounded-[22px] border border-slate-200 bg-slate-50/70 p-4 text-left transition-all duration-300 hover:border-sky-200 hover:bg-white hover:shadow-[0_18px_50px_-38px_rgba(14,116,144,0.24)]"
+                  className="w-full rounded-[24px] border border-stone-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(247,242,233,0.88))] p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_16px_24px_-22px_rgba(28,25,23,0.38)]"
                 >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="truncate text-base font-semibold text-slate-900">{task.name}</h3>
+                        <h3 className="truncate text-base font-semibold text-stone-950">{task.name}</h3>
                         <Badge variant={riskBadgeVariant(task.risk)} className="rounded-full">
                           风险 {task.risk}
                         </Badge>
                       </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-stone-500">
                         <span className={statusTone(task.status)}>{task.status}</span>
-                        <span className="text-slate-300">/</span>
+                        <span className="text-stone-300">/</span>
                         <span>AI 审查进度 {task.progress}%</span>
                       </div>
                     </div>
 
                     <div className="w-full max-w-xs lg:w-64">
-                      <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
+                      <div className="mb-2 flex items-center justify-between text-xs text-stone-500">
                         <span>处理进度</span>
                         <span>{task.progress}%</span>
                       </div>
@@ -340,7 +366,6 @@ const Dashboard = () => {
                   </div>
                 </button>
               ))}
-            </div>
           </CardContent>
         </Card>
       </section>

@@ -194,13 +194,13 @@ const Regulations = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 pb-8">
+      <div className="surface-paper flex flex-col gap-6 rounded-[34px] px-6 py-8 md:px-8 md:py-9 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">法规与规则管理</h1>
           <p className="mt-1 text-muted-foreground">管理审查依赖的法规、规则和支撑材料</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -208,7 +208,7 @@ const Regulations = () => {
                 上传法规文件
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl">
+            <DialogContent className="max-w-5xl">
               <DialogHeader>
                 <DialogTitle>上传法规文件</DialogTitle>
                 <DialogDescription>支持 PDF、文本和图片类法规文件，系统会自动识别文本并整理入库。</DialogDescription>
@@ -219,7 +219,7 @@ const Regulations = () => {
                   <Input
                     type="file"
                     accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp"
-                    className="mt-1"
+                    className="mt-2"
                     onChange={(e) => {
                       setUploadFile(e.target.files?.[0] ?? null);
                       setDraft(null);
@@ -228,9 +228,9 @@ const Regulations = () => {
                 </div>
 
                 {normalizedDraft && (
-                  <div className="space-y-4 rounded-lg border border-border p-4">
+                  <div className="space-y-4 rounded-[24px] border border-stone-200/90 bg-white/74 p-5">
                     {normalizedDraft.aiRefined?.applied && (
-                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                      <div className="rounded-[18px] border border-primary/20 bg-primary/5 p-4 text-sm">
                         <p className="font-medium text-foreground">AI 已辅助精修本次法规草稿</p>
                         <p className="mt-1 text-muted-foreground">
                           重点优化字段：
@@ -244,7 +244,7 @@ const Regulations = () => {
                     <div>
                       <Label>法规名称</Label>
                       <Input
-                        className="mt-1"
+                        className="mt-2"
                         value={normalizedDraft.name}
                         onChange={(e) => setDraft((current) => (current ? { ...current, name: e.target.value } : current))}
                       />
@@ -253,7 +253,7 @@ const Regulations = () => {
                     <div>
                       <Label>法规分类</Label>
                       <Input
-                        className="mt-1"
+                        className="mt-2"
                         value={normalizedDraft.category}
                         onChange={(e) => setDraft((current) => (current ? { ...current, category: e.target.value } : current))}
                       />
@@ -262,7 +262,7 @@ const Regulations = () => {
                     <div>
                       <Label>更新时间</Label>
                       <Input
-                        className="mt-1"
+                        className="mt-2"
                         value={normalizedDraft.updated}
                         onChange={(e) => setDraft((current) => (current ? { ...current, updated: e.target.value } : current))}
                       />
@@ -271,7 +271,7 @@ const Regulations = () => {
                     <div>
                       <Label>摘要</Label>
                       <Textarea
-                        className="mt-1"
+                        className="mt-2"
                         value={normalizedDraft.textPreview}
                         onChange={(e) => setDraft((current) => (current ? { ...current, textPreview: e.target.value } : current))}
                       />
@@ -301,7 +301,7 @@ const Regulations = () => {
 
                       <div className="mt-2 space-y-2">
                         {normalizedDraft.sections.map((section, index) => (
-                          <div key={`${section.title}-${index}`} className="rounded-lg border border-border p-3">
+                          <div key={`${section.title}-${index}`} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
                             <div className="flex items-center gap-2">
                               <Input
                                 value={section.title}
@@ -372,7 +372,7 @@ const Regulations = () => {
                       </div>
                       <div className="mt-2 max-h-72 space-y-2 overflow-auto">
                         {normalizedDraft.chunks.map((chunk, index) => (
-                          <div key={chunk.id} className="rounded-lg border border-border p-3">
+                          <div key={chunk.id} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
                             <div className="mb-2 flex items-center justify-between gap-2">
                               <p className="text-xs text-muted-foreground">条目 {index + 1}</p>
                               <div className="flex gap-2">
@@ -417,7 +417,7 @@ const Regulations = () => {
                             <div className="mt-2">
                               <Label className="text-xs text-muted-foreground">所属章节</Label>
                               <select
-                                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                className="mt-1 w-full rounded-[18px] border border-stone-300 bg-white/78 px-4 py-2.5 text-sm"
                                 value={chunk.sectionId ?? normalizedDraft.sections[0]?.title ?? ""}
                                 onChange={(e) =>
                                   updateDraftChunks(
@@ -496,7 +496,7 @@ const Regulations = () => {
       </div>
 
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input placeholder="搜索法规..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
       </div>
 
@@ -505,14 +505,14 @@ const Regulations = () => {
 
       <div className="space-y-4">
         {regulations.map((regulation) => (
-          <Card key={regulation.id} className="border border-border shadow-sm">
+          <Card key={regulation.id} className="overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(247,242,233,0.88))]">
             <CardContent className="p-0">
               <Accordion type="single" collapsible>
                 <AccordionItem value={`reg-${regulation.id}`} className="border-0">
                   <AccordionTrigger className="px-5 py-4 hover:no-underline">
                     <div className="flex w-full items-center justify-between gap-3 pr-2 text-left">
                       <div className="flex items-center gap-3">
-                        <div className="rounded-lg bg-primary/10 p-2">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-stone-200 bg-white/90 text-stone-800">
                           <BookOpen className="h-5 w-5 text-primary" />
                         </div>
                         <div>
@@ -533,7 +533,7 @@ const Regulations = () => {
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-8 w-8"
+                              className="h-9 w-9 rounded-full"
                               onClick={(e) => e.stopPropagation()}
                               disabled={deleteRegulationMutation.isPending}
                             >
@@ -559,7 +559,7 @@ const Regulations = () => {
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-8 w-8"
+                          className="h-9 w-9 rounded-full"
                           onClick={(e) => {
                             e.stopPropagation();
                             setEditingRegulationId(regulation.id);
@@ -587,7 +587,7 @@ const Regulations = () => {
                     <div className="ml-12 space-y-3">
                       <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">{regulation.textPreview || "暂无摘要"}</p>
                       {regulation.sections.map((section) => (
-                        <div key={`${regulation.id}-${section.title}`} className="rounded-lg border border-border bg-muted/40 p-3">
+                        <div key={`${regulation.id}-${section.title}`} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-foreground">{section.title}</span>
                             <div className="flex items-center gap-2">
@@ -599,7 +599,7 @@ const Regulations = () => {
                             {regulation.chunks
                               .filter((chunk) => (chunk.sectionTitle ?? regulation.sections[0]?.title) === section.title)
                               .map((chunk) => (
-                                <div key={chunk.id} className="rounded-lg border border-border bg-background p-3">
+                                <div key={chunk.id} className="rounded-[16px] border border-stone-200/80 bg-stone-50/85 p-4">
                                   <p className="text-xs text-muted-foreground">片段 {chunk.order}</p>
                                   <p className="mt-1 text-sm text-foreground">{chunk.text}</p>
                                 </div>
