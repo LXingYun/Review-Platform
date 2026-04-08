@@ -6,6 +6,8 @@ import { seedData } from "./seed";
 const dataDir = path.resolve(process.cwd(), "server-data");
 const dataFile = path.join(dataDir, "app-data.json");
 
+const stripUtf8Bom = (value: string) => value.replace(/^\uFEFF/, "");
+
 const ensureDataFile = () => {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -18,7 +20,7 @@ const ensureDataFile = () => {
 
 const readData = (): AppData => {
   ensureDataFile();
-  const parsed = JSON.parse(fs.readFileSync(dataFile, "utf8")) as AppData;
+  const parsed = JSON.parse(stripUtf8Bom(fs.readFileSync(dataFile, "utf8"))) as AppData;
 
   // Keep old local data files compatible as the document schema evolves.
   parsed.documents = parsed.documents.map((document) => ({
