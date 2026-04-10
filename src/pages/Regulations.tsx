@@ -505,14 +505,14 @@ const Regulations = () => {
 
       <div className="space-y-4">
         {regulations.map((regulation) => (
-          <Card key={regulation.id} className="overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(247,242,233,0.88))]">
+          <Card key={regulation.id} className="surface-panel overflow-hidden border-border/80 bg-card/90">
             <CardContent className="p-0">
               <Accordion type="single" collapsible>
                 <AccordionItem value={`reg-${regulation.id}`} className="border-0">
-                  <AccordionTrigger className="px-5 py-4 hover:no-underline">
+                  <AccordionTrigger className="px-5 py-4 hover:bg-background/35 hover:no-underline">
                     <div className="flex w-full items-center justify-between gap-3 pr-2 text-left">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-stone-200 bg-white/90 text-stone-800">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-border/80 bg-background/80 text-primary">
                           <BookOpen className="h-5 w-5 text-primary" />
                         </div>
                         <div>
@@ -587,7 +587,7 @@ const Regulations = () => {
                     <div className="ml-12 space-y-3">
                       <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">{regulation.textPreview || "暂无摘要"}</p>
                       {regulation.sections.map((section) => (
-                        <div key={`${regulation.id}-${section.title}`} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
+                        <div key={`${regulation.id}-${section.title}`} className="rounded-[18px] border border-border/80 bg-background/75 p-4">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-foreground">{section.title}</span>
                             <div className="flex items-center gap-2">
@@ -599,7 +599,7 @@ const Regulations = () => {
                             {regulation.chunks
                               .filter((chunk) => (chunk.sectionTitle ?? regulation.sections[0]?.title) === section.title)
                               .map((chunk) => (
-                                <div key={chunk.id} className="rounded-[16px] border border-stone-200/80 bg-stone-50/85 p-4">
+                                <div key={chunk.id} className="rounded-[16px] border border-border/70 bg-background/85 p-4">
                                   <p className="text-xs text-muted-foreground">片段 {chunk.order}</p>
                                   <p className="mt-1 text-sm text-foreground">{chunk.text}</p>
                                 </div>

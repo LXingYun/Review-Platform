@@ -13,10 +13,10 @@ import {
 import { appThemes, type AppTheme } from "@/lib/app-themes";
 
 const navItems = [
-  { path: "/", label: "仪表盘", helper: "品牌入口与总览", icon: LayoutDashboard },
-  { path: "/projects", label: "项目管理", helper: "项目、任务与状态", icon: FolderKanban },
-  { path: "/upload", label: "文件审查", helper: "发起新一轮审查", icon: FileSearch },
-  { path: "/regulations", label: "法规管理", helper: "法规与规则底座", icon: BookOpen },
+  { path: "/", label: "仪表盘", helper: "总览当前审查工作", icon: LayoutDashboard },
+  { path: "/projects", label: "项目管理", helper: "查看和维护审查项目", icon: FolderKanban },
+  { path: "/upload", label: "文件审查", helper: "上传文件并发起审查", icon: FileSearch },
+  { path: "/regulations", label: "法规管理", helper: "维护法规与规则条目", icon: BookOpen },
 ];
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
@@ -68,20 +68,29 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="surface-paper rounded-[30px] px-5 py-5">
             {collapsed ? (
               <div className="flex items-center justify-center py-3">
-                <div className="h-10 w-10 rounded-full bg-primary text-center text-sm leading-10 text-primary-foreground">审</div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-border/80 bg-white/85 shadow-sm">
+                  <img src="/logo1.png" alt="招投标文件审查中心" className="h-9 w-9 object-contain" />
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="eyebrow">Review Platform</span>
+                  <span className="eyebrow">招投标文件审查中心</span>
                   <div className="shell-tag rounded-full px-3 py-1 text-[11px] font-medium">AI 审查</div>
                 </div>
-                <div className="space-y-2">
-                  <p className="font-display text-[28px] leading-none text-foreground">审查中心</p>
-                  <p className="max-w-[18rem] text-sm leading-6 text-muted-foreground">
-                    为招标、投标与法规审查提供统一的资料入口、任务编排和复核工作台。
-                  </p>
+
+                <div className="flex items-start gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-border/80 bg-white/90 shadow-sm">
+                    <img src="/logo1.png" alt="招投标文件审查中心" className="h-11 w-11 object-contain" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-display text-[28px] leading-none text-foreground">招投标文件审查中心</p>
+                    <p className="max-w-[18rem] text-sm leading-6 text-muted-foreground">
+                      围绕招标文件、投标文件与法规条目的统一审查工作台。
+                    </p>
+                  </div>
                 </div>
+
                 <div className="rounded-[20px] border border-border/80 bg-card/65 px-4 py-3">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     <Palette className="h-3.5 w-3.5" />
@@ -97,7 +106,12 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
         <nav className="relative flex-1 px-5 pb-5">
           <div className="surface-panel rounded-[30px] p-3">
-            {!collapsed && <p className="px-3 pb-3 pt-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Navigation</p>}
+            {!collapsed && (
+              <p className="px-3 pb-3 pt-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Navigation
+              </p>
+            )}
+
             <div className="space-y-1.5">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
@@ -122,10 +136,17 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                     >
                       <item.icon className="h-5 w-5" />
                     </div>
+
                     {!collapsed && (
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{item.label}</p>
-                        <p className={`truncate text-xs ${isActive ? "text-primary-foreground/70" : "text-muted-foreground/80"}`}>{item.helper}</p>
+                        <p
+                          className={`truncate text-xs ${
+                            isActive ? "text-primary-foreground/70" : "text-muted-foreground/80"
+                          }`}
+                        >
+                          {item.helper}
+                        </p>
                       </div>
                     )}
                   </Link>
@@ -159,12 +180,20 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
         <div className="md:hidden">
           <div className="sidebar-shell border-b px-5 py-4">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Review Platform</p>
-                <p className="mt-2 font-display text-2xl text-foreground">审查中心</p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-border/80 bg-white/90 shadow-sm">
+                  <img src="/logo1.png" alt="招投标文件审查中心" className="h-9 w-9 object-contain" />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    招投标文件审查中心
+                  </p>
+                  <p className="mt-1 font-display text-2xl text-foreground">文件审查中心</p>
+                </div>
               </div>
               <div className="shell-tag rounded-full px-3 py-1 text-xs">AI 审查</div>
             </div>
+
             <div className="mt-4 flex gap-2 overflow-auto pb-1">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
@@ -174,7 +203,9 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                     key={item.path}
                     to={item.path}
                     className={`whitespace-nowrap rounded-full border px-3 py-2 text-sm transition-colors ${
-                      isActive ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card/72 text-foreground"
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card/72 text-foreground"
                     }`}
                   >
                     {item.label}
@@ -182,11 +213,16 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                 );
               })}
             </div>
+
             <div className="mt-4">{renderThemeSwitcher()}</div>
           </div>
         </div>
 
-        <div className={isHome ? "min-h-screen px-5 py-5 md:px-8 md:py-7" : "mx-auto max-w-[1120px] px-5 py-6 md:px-8 md:py-8"}>
+        <div
+          className={
+            isHome ? "min-h-screen px-5 py-5 md:px-8 md:py-7" : "mx-auto max-w-[1120px] px-5 py-6 md:px-8 md:py-8"
+          }
+        >
           {children}
         </div>
       </main>

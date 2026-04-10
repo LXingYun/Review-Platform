@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = {
   light: ':root, [data-theme="editorial"], [data-theme="professional"]',
-  dark: '[data-theme="midnight"]',
 } as const;
 
 export type ChartConfig = {
