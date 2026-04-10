@@ -151,7 +151,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </nav>
 
-        <div className={`sticky bottom-0 z-10 mt-auto space-y-3 bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(248,244,236,0.92)_20%,rgba(248,244,236,0.96))] pb-6 pt-4 ${collapsed ? "px-3" : "px-5"}`}>
+        <div className={`sticky bottom-0 z-10 mt-auto space-y-3 pb-6 pt-4 ${collapsed ? "px-3" : "px-5"}`} style={{ background: "var(--shell-footer-bg)" }}>
           {collapsed && renderThemeSwitcher(true)}
           <button
             type="button"

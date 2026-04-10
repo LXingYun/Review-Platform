@@ -68,12 +68,19 @@
     --surface-panel-border: hsl(var(--border) / 0.72);
     --surface-panel-shadow: 0 16px 34px -30px rgba(40, 31, 22, 0.3);
 
+    --dialog-bg: linear-gradient(180deg, hsl(42 24% 98% / 0.98), hsl(39 22% 95% / 0.98));
+    --dialog-shadow: 0 24px 70px -34px rgba(28, 25, 23, 0.45);
+    --dialog-close-bg: hsl(42 24% 98% / 0.86);
+    --control-bg: hsl(42 24% 98% / 0.84);
+    --control-hover-bg: hsl(42 24% 99% / 0.98);
+
     --eyebrow-bg: hsl(var(--secondary) / 0.7);
     --eyebrow-fg: hsl(var(--muted-foreground));
 
     --shell-background: linear-gradient(180deg, rgba(247, 241, 232, 0.92), rgba(244, 238, 228, 0.82));
     --shell-border: hsl(30 17% 78% / 0.7);
     --shell-glow: radial-gradient(circle at top, rgba(214, 185, 140, 0.18), transparent 72%);
+    --shell-footer-bg: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(248, 244, 236, 0.92) 20%, rgba(248, 244, 236, 0.96));
 
     --theme-switcher-bg: hsl(var(--secondary) / 0.52);
     --theme-switcher-border: hsl(var(--border) / 0.88);
@@ -147,12 +154,19 @@
     --surface-panel-border: hsl(var(--border) / 0.78);
     --surface-panel-shadow: 0 18px 34px -30px rgba(41, 74, 129, 0.28);
 
+    --dialog-bg: linear-gradient(180deg, hsl(0 0% 100% / 0.99), hsl(214 30% 97% / 0.99));
+    --dialog-shadow: 0 24px 70px -34px rgba(33, 81, 177, 0.22);
+    --dialog-close-bg: hsl(0 0% 100% / 0.92);
+    --control-bg: hsl(0 0% 100% / 0.86);
+    --control-hover-bg: hsl(0 0% 100% / 0.98);
+
     --eyebrow-bg: hsl(var(--secondary) / 0.82);
     --eyebrow-fg: hsl(var(--muted-foreground));
 
     --shell-background: linear-gradient(180deg, rgba(244, 248, 255, 0.96), rgba(236, 242, 252, 0.84));
     --shell-border: hsl(214 24% 84% / 0.82);
     --shell-glow: radial-gradient(circle at top, rgba(106, 156, 255, 0.18), transparent 72%);
+    --shell-footer-bg: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(241, 246, 255, 0.92) 20%, rgba(238, 244, 253, 0.96));
 
     --theme-switcher-bg: hsl(var(--secondary) / 0.72);
     --theme-switcher-border: hsl(var(--border) / 0.9);
