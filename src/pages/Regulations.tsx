@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Plus, BookOpen, ChevronRight, Pencil, Trash2, Upload } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,8 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { apiRequest } from "@/lib/api";
 import { RegulationDraft, RegulationItem } from "@/lib/api-types";
+import { useCreateRegulationMutation, useDeleteRegulationMutation, usePreviewRegulationUploadMutation, useRegulationsQuery, useSaveRegulationDraftMutation } from "@/hooks/queries";
 
 const categoryColor = (category: string) => {
   if (category === "法律") return "bg-primary/10 text-primary border-primary/20";
@@ -39,7 +38,6 @@ const categoryColor = (category: string) => {
 };
 
 const Regulations = () => {
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -51,72 +49,23 @@ const Regulations = () => {
   const [draft, setDraft] = useState<RegulationDraft | null>(null);
   const [editingRegulationId, setEditingRegulationId] = useState<string | null>(null);
 
-  const { data: regulations = [], isLoading, isError } = useQuery({
-    queryKey: ["regulations", search],
-    queryFn: () => apiRequest<RegulationItem[]>(`/regulations?search=${encodeURIComponent(search)}`),
-  });
+  const { data: regulations = [], isLoading, isError } = useRegulationsQuery(search);
 
-  const createRegulationMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<RegulationItem>("/regulations", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          category,
-          updated: updated || "手动录入",
-          ruleCount: 1,
-          textPreview,
-          chunks: [
-            {
-              id: `manual-${Date.now()}`,
-              order: 1,
-              text: textPreview || `${name}（手动录入，暂无条款摘要）`,
-            },
-          ],
-          sections: [
-            {
-              title: "手动录入",
-              rules: 1,
-            },
-          ],
-        }),
-      }),
+const createRegulationMutation = useCreateRegulationMutation({
     onSuccess: () => {
       setOpen(false);
       setName("");
-      setCategory("法律");
+      setCategory("\u6cd5\u5f8b");
       setUpdated("");
       setTextPreview("");
-      queryClient.invalidateQueries({ queryKey: ["regulations"] });
     },
   });
 
-  const deleteRegulationMutation = useMutation({
-    mutationFn: (regulationId: string) =>
-      apiRequest<{ success: boolean; regulationId: string }>(`/regulations/${regulationId}`, {
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["regulations"] });
-    },
-  });
+  const deleteRegulationMutation = useDeleteRegulationMutation();
 
-  const uploadRegulationMutation = useMutation({
-    mutationFn: () => {
-      if (!uploadFile) {
-        throw new Error("请先选择法规文件");
-      }
-
-      const formData = new FormData();
-      formData.append("file", uploadFile);
-
-      return apiRequest<RegulationDraft>("/regulations/upload/preview", {
-        method: "POST",
-        body: formData,
-      });
-    },
+const uploadRegulationMutation = usePreviewRegulationUploadMutation({
     onSuccess: (preview) => {
-      const initialSectionTitle = preview.sections[0]?.title ?? "自动识别条款";
+      const initialSectionTitle = preview.sections[0]?.title ?? "\u81ea\u52a8\u8bc6\u522b\u6761\u6b3e";
       setDraft({
         ...preview,
         chunks: preview.chunks.map((chunk) => ({
@@ -127,24 +76,12 @@ const Regulations = () => {
     },
   });
 
-  const confirmDraftMutation = useMutation({
-    mutationFn: (payload: RegulationDraft) =>
-      apiRequest<RegulationItem>(editingRegulationId ? `/regulations/${editingRegulationId}` : "/regulations", {
-        method: editingRegulationId ? "PUT" : "POST",
-        body: JSON.stringify({
-          ...payload,
-          chunks: payload.chunks.map(({ sectionId, ...chunk }) => ({
-            ...chunk,
-            sectionTitle: sectionId,
-          })),
-        }),
-      }),
+const confirmDraftMutation = useSaveRegulationDraftMutation({
     onSuccess: () => {
       setDraft(null);
       setEditingRegulationId(null);
       setUploadOpen(false);
       setUploadFile(null);
-      queryClient.invalidateQueries({ queryKey: ["regulations"] });
     },
   });
 
@@ -193,6 +130,38 @@ const Regulations = () => {
     updateDraftChunks(nextChunks.map((item, index) => ({ ...item, order: index + 1 })));
   };
 
+  const handleCreateRegulation = () => {
+    createRegulationMutation.mutate({
+      name,
+      category,
+      updated: updated || "\u624b\u52a8\u5f55\u5165",
+      ruleCount: 1,
+      textPreview,
+      chunks: [
+        {
+          id: `manual-${Date.now()}`,
+          order: 1,
+          text: textPreview || `${name}\uff08\u624b\u52a8\u5f55\u5165\uff0c\u6682\u65e0\u6761\u6b3e\u6458\u8981\uff09`,
+        },
+      ],
+      sections: [
+        {
+          title: "\u624b\u52a8\u5f55\u5165",
+          rules: 1,
+        },
+      ],
+    });
+  };
+
+  const handlePreviewUpload = () => {
+    if (!uploadFile) return;
+    uploadRegulationMutation.mutate(uploadFile);
+  };
+
+  const handleConfirmDraft = () => {
+    if (!normalizedDraft) return;
+    confirmDraftMutation.mutate({ draft: normalizedDraft, regulationId: editingRegulationId });
+  };
   return (
     <div className="space-y-8 pb-8">
       <div className="surface-paper flex flex-col gap-6 rounded-[34px] px-6 py-8 md:px-8 md:py-9 lg:flex-row lg:items-end lg:justify-between">
@@ -443,11 +412,11 @@ const Regulations = () => {
               </div>
               <DialogFooter>
                 {!normalizedDraft ? (
-                  <Button onClick={() => uploadRegulationMutation.mutate()} disabled={!uploadFile || uploadRegulationMutation.isPending}>
+                  <Button onClick={handlePreviewUpload} disabled={!uploadFile || uploadRegulationMutation.isPending}>
                     {uploadRegulationMutation.isPending ? "识别中..." : "上传并识别"}
                   </Button>
                 ) : (
-                  <Button onClick={() => confirmDraftMutation.mutate(normalizedDraft)} disabled={confirmDraftMutation.isPending}>
+                  <Button onClick={handleConfirmDraft} disabled={confirmDraftMutation.isPending}>
                     {confirmDraftMutation.isPending ? "保存中..." : "确认入库"}
                   </Button>
                 )}
@@ -486,7 +455,7 @@ const Regulations = () => {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={() => createRegulationMutation.mutate()} disabled={!name || !textPreview || createRegulationMutation.isPending}>
+                <Button onClick={handleCreateRegulation} disabled={!name || !textPreview || createRegulationMutation.isPending}>
                   {createRegulationMutation.isPending ? "保存中..." : "保存法规"}
                 </Button>
               </DialogFooter>

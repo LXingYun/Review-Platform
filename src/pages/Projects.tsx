@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FolderKanban, Plus, Search, Trash2 } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,8 +20,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiRequest } from "@/lib/api";
 import { ProjectListItem } from "@/lib/api-types";
+import { useCreateProjectMutation, useDeleteProjectMutation, useProjectsQuery } from "@/hooks/queries";
 
 const statusStyle = (status: ProjectListItem["status"]) => {
   if (status === "进行中") return "border-primary/20 bg-primary/10 text-primary";
@@ -35,7 +34,6 @@ const projectTypeNote = (type: ProjectListItem["type"]) =>
   type === "招标审查" ? "聚焦法规、条款与合规要求审查。" : "聚焦响应性、一致性与缺漏风险核验。";
 
 const Projects = () => {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -43,36 +41,18 @@ const Projects = () => {
   const [type, setType] = useState<"招标审查" | "投标审查" | "">("");
   const [description, setDescription] = useState("");
 
-  const { data: projects = [], isLoading, isError } = useQuery({
-    queryKey: ["projects", search],
-    queryFn: () => apiRequest<ProjectListItem[]>(`/projects?search=${encodeURIComponent(search)}`),
-  });
+  const { data: projects = [], isLoading, isError } = useProjectsQuery(search);
 
-  const createProjectMutation = useMutation({
-    mutationFn: (payload: { name: string; type: "招标审查" | "投标审查"; description: string }) =>
-      apiRequest<ProjectListItem>("/projects", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }),
+const createProjectMutation = useCreateProjectMutation({
     onSuccess: () => {
       setOpen(false);
       setName("");
       setType("");
       setDescription("");
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 
-  const deleteProjectMutation = useMutation({
-    mutationFn: (projectId: string) =>
-      apiRequest<{ success: boolean; projectId: string }>(`/projects/${projectId}`, {
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
+  const deleteProjectMutation = useDeleteProjectMutation();
 
   return (
     <div className="space-y-6 pb-8">

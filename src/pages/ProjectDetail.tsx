@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileSearch, FolderKanban, RotateCcw, Trash2, UploadCloud } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +15,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { apiRequest } from "@/lib/api";
 import { DocumentItem, ProjectDetailItem, ReviewTaskItem, ReviewTaskResult } from "@/lib/api-types";
+import {
+  useAbortReviewTaskMutation,
+  useDeleteProjectMutation,
+  useDeleteReviewTaskMutation,
+  useDocumentsQuery,
+  useProjectsQuery,
+  useRetryReviewTaskMutation,
+  useReviewTasksQuery,
+} from "@/hooks/queries";
+import { formatDocumentParseMethodLabel } from "@/lib/formatters/document";
+import { getProjectStatusClassName } from "@/lib/formatters/project";
+import { getRiskBadgeVariant } from "@/lib/formatters/review";
 
 const statusStyle = (status: ProjectDetailItem["status"]) => {
   if (status === "进行中") return "border-primary/20 bg-primary/10 text-primary";
@@ -40,79 +50,30 @@ const parseMethodLabel = (parseMethod: DocumentItem["parseMethod"]) => {
 };
 
 const ProjectDetail = () => {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { projectId = "" } = useParams();
 
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
-    queryKey: ["projects", "detail"],
-    queryFn: () => apiRequest<ProjectDetailItem[]>("/projects"),
-  });
-
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
-    queryKey: ["review-tasks", projectId],
-    queryFn: () => apiRequest<ReviewTaskItem[]>(`/review-tasks?projectId=${encodeURIComponent(projectId)}`),
+  const { data: projects = [], isLoading: projectsLoading } = useProjectsQuery();
+  const { data: tasks = [], isLoading: tasksLoading } = useReviewTasksQuery({
+    projectId,
     enabled: Boolean(projectId),
   });
-
-  const { data: documents = [], isLoading: documentsLoading } = useQuery({
-    queryKey: ["documents", projectId, "detail"],
-    queryFn: () => apiRequest<DocumentItem[]>(`/documents?projectId=${encodeURIComponent(projectId)}`),
+  const { data: documents = [], isLoading: documentsLoading } = useDocumentsQuery({
+    projectId,
     enabled: Boolean(projectId),
   });
 
   const project = useMemo(() => projects.find((item) => item.id === projectId), [projects, projectId]);
 
-  const deleteProjectMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ success: boolean; projectId: string }>(`/projects/${projectId}`, {
-        method: "DELETE",
-      }),
+  const deleteProjectMutation = useDeleteProjectMutation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       navigate("/projects");
     },
   });
 
-  const deleteTaskMutation = useMutation({
-    mutationFn: (taskId: string) =>
-      apiRequest<{ success: boolean; taskId: string; projectId: string }>(`/review-tasks/${taskId}`, {
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["review-tasks", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
-
-  const retryTaskMutation = useMutation({
-    mutationFn: (taskId: string) =>
-      apiRequest<ReviewTaskResult>(`/review-tasks/${taskId}/retry`, {
-        method: "POST",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["review-tasks", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
-
-  const abortTaskMutation = useMutation({
-    mutationFn: (taskId: string) =>
-      apiRequest<{ success: boolean }>(`/review-tasks/${taskId}/abort`, {
-        method: "POST",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["review-tasks", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
+  const deleteTaskMutation = useDeleteReviewTaskMutation();
+  const retryTaskMutation = useRetryReviewTaskMutation();
+  const abortTaskMutation = useAbortReviewTaskMutation();
 
   if (projectsLoading) {
     return <p className="text-sm text-muted-foreground">项目详情加载中...</p>;
@@ -144,7 +105,7 @@ const ProjectDetail = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={`${statusStyle(project.status)} whitespace-nowrap`}>
+              <Badge variant="outline" className={`${getProjectStatusClassName(project.status)} whitespace-nowrap`}>
                 {project.status}
               </Badge>
               <Badge variant="outline">{project.type}</Badge>
@@ -170,7 +131,7 @@ const ProjectDetail = () => {
                 <AlertDialogFooter>
                   <AlertDialogCancel>取消</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() => deleteProjectMutation.mutate()}
+                    onClick={() => deleteProjectMutation.mutate(projectId)}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     确认删除
@@ -227,7 +188,7 @@ const ProjectDetail = () => {
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                       <Badge variant="outline">{task.status}</Badge>
-                      <Badge variant={taskRiskBadge(task.riskLevel)}>{task.riskLevel}风险</Badge>
+                        <Badge variant={getRiskBadgeVariant(task.riskLevel)}>{task.riskLevel}风险</Badge>
                     </div>
                   </div>
 
@@ -312,7 +273,7 @@ const ProjectDetail = () => {
                   <div>
                     <p className="text-base font-semibold text-foreground">{document.originalName}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {document.role} · {document.pageCount} 页 · {parseMethodLabel(document.parseMethod)}
+                        {document.role} · {document.pageCount} 页 · {formatDocumentParseMethodLabel(document.parseMethod)}
                     </p>
                   </div>
                   <Badge variant="outline">{document.parseStatus}</Badge>

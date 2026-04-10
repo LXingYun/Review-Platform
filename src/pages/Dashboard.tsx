@@ -11,14 +11,13 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { apiRequest } from "@/lib/api";
-import { DashboardResponse } from "@/lib/api-types";
+import { useDashboardQuery } from "@/hooks/queries";
+import { getRiskBadgeVariant } from "@/lib/formatters/review";
 
 const statIcons = {
   审查项目总数: FolderKanban,
@@ -99,10 +98,7 @@ const statusTone = (status: string) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => apiRequest<DashboardResponse>("/dashboard"),
-  });
+  const { data, isLoading, isError } = useDashboardQuery();
 
   const stats = data?.stats ?? [];
   const recentTasks = data?.recentTasks ?? [];
@@ -299,7 +295,7 @@ const Dashboard = () => {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="truncate text-base font-semibold text-foreground">{task.name}</h3>
-                        <Badge variant={riskBadgeVariant(task.risk)} className="rounded-full">
+                        <Badge variant={getRiskBadgeVariant(task.risk)} className="rounded-full">
                           风险 {task.risk}
                         </Badge>
                       </div>

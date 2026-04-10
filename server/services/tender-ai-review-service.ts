@@ -335,7 +335,7 @@ export const generateTenderChapterAiFindings = async (params: {
   }
 
   const chapterFindings = chapterResults.flatMap((result) =>
-    result.findings.map<Finding>((finding) => ({
+    result.findings.map((finding) => ({
       id: createId("finding"),
       projectId: params.projectId,
       taskId: params.taskId,
@@ -356,7 +356,7 @@ export const generateTenderChapterAiFindings = async (params: {
       scenario: "tender_compliance",
       reviewLogs: [],
       createdAt: nowIso(),
-    })),
+    }) as Finding),
   );
 
   params.onProgress?.({
@@ -371,7 +371,7 @@ export const generateTenderChapterAiFindings = async (params: {
     summary: "",
   }));
 
-  const crossFindings = crossScan.conflicts.map<Finding>((conflict) => ({
+  const crossFindings = crossScan.conflicts.map((conflict) => ({
     id: createId("finding"),
     projectId: params.projectId,
     taskId: params.taskId,
@@ -392,7 +392,7 @@ export const generateTenderChapterAiFindings = async (params: {
     scenario: "tender_compliance",
     reviewLogs: [],
     createdAt: nowIso(),
-  }));
+  }) as Finding);
 
   return {
     findings: [...chapterFindings, ...crossFindings],

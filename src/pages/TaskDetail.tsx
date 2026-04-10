@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -32,8 +31,8 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { apiRequest } from "@/lib/api";
 import { DocumentItem, FindingListItem, ReviewTaskDetailItem, ReviewTaskResult } from "@/lib/api-types";
+import { useAbortReviewTaskMutation, useAddFindingReviewLogMutation, useDeleteReviewTaskMutation, useDocumentsQuery, useFindingsQuery, useReviewTasksQuery, useRetryReviewTaskMutation, useUpdateFindingStatusMutation } from "@/hooks/queries";
 
 const reviewerStorageKey = "review-platform-reviewer";
 
@@ -93,7 +92,6 @@ const formatReviewAction = (action: FindingListItem["reviewLogs"][number]["actio
 };
 
 const TaskDetail = () => {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { taskId = "" } = useParams();
   const [search, setSearch] = useState("");
@@ -119,6 +117,14 @@ const TaskDetail = () => {
     setReviewNote("");
   }, [selectedIssue?.id]);
 
+  const { data: tasks = [], isLoading: tasksLoading } = useReviewTasksQuery({ refetchInterval: 3000 });
+
+  const task = useMemo(() => tasks.find((item) => item.id === taskId), [tasks, taskId]);
+
+  const { data: documents = [], isLoading: documentsLoading } = useDocumentsQuery({ projectId: task?.projectId, enabled: Boolean(task?.projectId) });
+
+  const { data: findings = [], isLoading: findingsLoading } = useFindingsQuery({ filters: { projectId: task?.projectId, scenario: task?.scenario, taskId }, enabled: Boolean(task?.projectId && task?.scenario), refetchInterval: task && (task.status === "\u5f85\u5ba1\u6838" || task.status === "\u8fdb\u884c\u4e2d") ? 3000 : false });
+
   useEffect(() => {
     if (!selectedIssue) return;
 
@@ -132,33 +138,6 @@ const TaskDetail = () => {
       setSelectedIssue(nextSelectedIssue);
     }
   }, [findings, selectedIssue]);
-
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
-    queryKey: ["review-tasks", "all"],
-    queryFn: () => apiRequest<ReviewTaskDetailItem[]>("/review-tasks"),
-    refetchInterval: 3000,
-  });
-
-  const task = useMemo(() => tasks.find((item) => item.id === taskId), [tasks, taskId]);
-
-  const { data: documents = [], isLoading: documentsLoading } = useQuery({
-    queryKey: ["documents", task?.projectId, "task-detail"],
-    queryFn: () => apiRequest<DocumentItem[]>(`/documents?projectId=${encodeURIComponent(task!.projectId)}`),
-    enabled: Boolean(task?.projectId),
-  });
-
-  const { data: findings = [], isLoading: findingsLoading } = useQuery({
-    queryKey: ["findings", taskId, "task-detail"],
-    queryFn: async () => {
-      const projectFindings = await apiRequest<FindingListItem[]>(
-        `/findings?projectId=${encodeURIComponent(task!.projectId)}&scenario=${task!.scenario}`,
-      );
-
-      return projectFindings.filter((finding) => finding.taskId === taskId);
-    },
-    enabled: Boolean(task?.projectId && task?.scenario),
-    refetchInterval: task && (task.status === "待审核" || task.status === "进行中") ? 3000 : false,
-  });
 
   const relatedDocuments = useMemo(() => {
     if (!task) return [];
@@ -193,76 +172,26 @@ const TaskDetail = () => {
   const midCount = filteredFindings.filter((finding) => finding.risk === "中").length;
   const lowCount = filteredFindings.filter((finding) => finding.risk === "低").length;
 
-  const updateFindingMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: "待复核" | "已确认" | "已忽略" }) =>
-      apiRequest<FindingListItem>(`/findings/${id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          status,
-          note: reviewNote.trim() || undefined,
-          reviewer: reviewNote.trim() ? reviewer.trim() : undefined,
-        }),
-      }),
+const updateFindingMutation = useUpdateFindingStatusMutation({
     onSuccess: () => {
       setSelectedIssue(null);
       setReviewNote("");
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 
-  const addReviewLogMutation = useMutation({
-    mutationFn: ({ id, note, reviewerName }: { id: string; note: string; reviewerName: string }) =>
-      apiRequest<FindingListItem>(`/findings/${id}/review-log`, {
-        method: "POST",
-        body: JSON.stringify({
-          note,
-          reviewer: reviewerName,
-        }),
-      }),
+const addReviewLogMutation = useAddFindingReviewLogMutation({
     onSuccess: (updatedFinding) => {
       setSelectedIssue(updatedFinding);
       setReviewNote("");
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
     },
   });
 
-  const retryTaskMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<ReviewTaskResult>(`/review-tasks/${taskId}/retry`, {
-        method: "POST",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
+  const retryTaskMutation = useRetryReviewTaskMutation();
 
-  const abortTaskMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ success: boolean }>(`/review-tasks/${taskId}/abort`, {
-        method: "POST",
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
+  const abortTaskMutation = useAbortReviewTaskMutation();
 
-  const deleteTaskMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ success: boolean; taskId: string; projectId: string }>(`/review-tasks/${taskId}`, {
-        method: "DELETE",
-      }),
+const deleteTaskMutation = useDeleteReviewTaskMutation({
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["review-tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["findings"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       navigate(`/projects/${result.projectId}`);
     },
   });
@@ -281,7 +210,7 @@ const TaskDetail = () => {
     addReviewLogMutation.mutate({
       id: selectedIssue.id,
       note: reviewNote.trim(),
-      reviewerName: reviewer.trim(),
+      reviewer: reviewer.trim(),
     });
   };
 
@@ -346,14 +275,14 @@ const TaskDetail = () => {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>取消</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => abortTaskMutation.mutate()}>确认中止</AlertDialogAction>
+                  <AlertDialogAction onClick={() => abortTaskMutation.mutate(taskId)}>确认中止</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           )}
 
           {(task.status === "失败" || task.status === "未完成") && (
-            <Button variant="outline" disabled={retryTaskMutation.isPending} onClick={() => retryTaskMutation.mutate()}>
+            <Button variant="outline" disabled={retryTaskMutation.isPending} onClick={() => retryTaskMutation.mutate(taskId)}>
               <RotateCcw className="mr-2 h-4 w-4" />
               重新执行
             </Button>
@@ -376,7 +305,7 @@ const TaskDetail = () => {
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={() => deleteTaskMutation.mutate()}
+                  onClick={() => deleteTaskMutation.mutate(taskId)}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
                   确认删除
@@ -674,7 +603,7 @@ const TaskDetail = () => {
                   <Button
                     className="flex-1"
                     disabled={updateFindingMutation.isPending || (!!reviewNote.trim() && !reviewer.trim())}
-                    onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已确认" })}
+                    onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已确认", note: reviewNote.trim() || undefined, reviewer: reviewNote.trim() ? reviewer.trim() : undefined })}
                   >
                     <CheckCircle2 className="mr-1 h-4 w-4" />
                     确认问题
@@ -683,7 +612,7 @@ const TaskDetail = () => {
                     variant="outline"
                     className="flex-1"
                     disabled={updateFindingMutation.isPending || (!!reviewNote.trim() && !reviewer.trim())}
-                    onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已忽略" })}
+                    onClick={() => updateFindingMutation.mutate({ id: selectedIssue.id, status: "已忽略", note: reviewNote.trim() || undefined, reviewer: reviewNote.trim() ? reviewer.trim() : undefined })}
                   >
                     忽略
                   </Button>
