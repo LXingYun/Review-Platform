@@ -76,9 +76,9 @@ const ChunkGroup = ({
       <Label className="text-xs text-muted-foreground">{title}</Label>
       <div className="mt-2 space-y-2">
         {items.map((item) => (
-          <div key={`${title}-${item.label}-${item.text}`} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
-            <p className="text-xs font-medium text-stone-500">{item.label}</p>
-            <p className="mt-2 text-sm leading-7 text-stone-700">{item.text}</p>
+          <div key={`${title}-${item.label}-${item.text}`} className="rounded-[18px] border border-border/80 bg-background/80 p-4">
+            <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
+            <p className="mt-2 text-sm leading-7 text-foreground">{item.text}</p>
           </div>
         ))}
       </div>
@@ -288,16 +288,16 @@ const TaskDetail = () => {
   const renderIssueRow = (finding: FindingListItem) => (
     <div
       key={finding.id}
-      className="flex cursor-pointer items-center justify-between gap-4 p-4 transition-colors hover:bg-white"
+                className="flex cursor-pointer items-center justify-between gap-4 p-4 transition-colors hover:bg-background"
       onClick={() => setSelectedIssue(finding)}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-stone-50">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border/80 bg-background">
           {riskIcon(finding.risk)}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-stone-950">{finding.title}</p>
-          <p className="mt-1 text-xs text-stone-500">{finding.location}</p>
+                      <p className="text-sm font-medium text-foreground">{finding.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{finding.location}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -322,9 +322,9 @@ const TaskDetail = () => {
           </Button>
           <div>
             <div className="mb-2">
-              <span className="eyebrow">Review Task</span>
+              <span className="eyebrow">审查任务</span>
             </div>
-            <h1 className="font-display text-4xl leading-[1.08] text-stone-950 md:text-5xl">{task.name}</h1>
+            <h1 className="font-display text-4xl leading-[1.08] text-foreground md:text-5xl">{task.name}</h1>
             <p className="mt-1 text-muted-foreground">任务详情、关联文件与问题清单</p>
           </div>
         </div>
@@ -388,7 +388,7 @@ const TaskDetail = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="surface-paper bg-white/72 lg:col-span-2">
+        <Card className="surface-paper bg-card/85 lg:col-span-2">
           <CardContent className="space-y-4 p-6">
             <div className="flex items-center gap-2">
               <Badge variant="outline">{task.projectName}</Badge>
@@ -396,7 +396,7 @@ const TaskDetail = () => {
               <Badge variant={riskBadge(task.riskLevel)}>{task.riskLevel}风险</Badge>
               {task.attemptCount > 1 && <Badge variant="outline">第 {task.attemptCount} 次执行</Badge>}
             </div>
-            <div className="space-y-2 text-sm text-stone-600">
+            <div className="space-y-2 text-sm text-muted-foreground">
               <p>任务状态：{task.status}</p>
               <p>当前阶段：{task.stageLabel}</p>
               <p>创建时间：{task.createdAt.slice(0, 10)}</p>
@@ -409,24 +409,24 @@ const TaskDetail = () => {
           </CardContent>
         </Card>
 
-        <Card className="surface-panel bg-white/72">
+        <Card className="surface-panel bg-card/85">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">概况</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-stone-600">
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="flex justify-between">
               <span className="text-muted-foreground">关联文件</span>
-              <span className="font-medium text-stone-950">{relatedDocuments.length}</span>
+              <span className="font-medium text-foreground">{relatedDocuments.length}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">问题数量</span>
-              <span className="font-medium text-stone-950">{findings.length}</span>
+              <span className="font-medium text-foreground">{findings.length}</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(247,242,233,0.88))]">
+      <Card className="surface-panel border-border/80 bg-card/90">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">关联文件</CardTitle>
         </CardHeader>
@@ -437,17 +437,17 @@ const TaskDetail = () => {
           )}
 
           {relatedDocuments.map((document) => (
-            <div key={document.id} className="rounded-[24px] border border-stone-200/90 bg-white/82 p-4">
+            <div key={document.id} className="rounded-[24px] border border-border/80 bg-background/80 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-base font-semibold text-stone-950">{document.originalName}</p>
-                  <p className="mt-2 text-xs text-stone-500">
+                  <p className="text-base font-semibold text-foreground">{document.originalName}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
                     {document.role} · {document.pageCount} 页 · {parseMethodLabel(document.parseMethod)}
                   </p>
                 </div>
                 <Badge variant="outline">{document.parseStatus}</Badge>
               </div>
-              <p className="mt-4 rounded-[18px] border border-stone-200/80 bg-stone-50/85 p-4 text-sm leading-7 text-stone-600">
+              <p className="mt-4 rounded-[18px] border border-border/70 bg-background/88 p-4 text-sm leading-7 text-muted-foreground">
                 {document.textPreview || "暂无解析摘要"}
               </p>
             </div>
@@ -504,7 +504,7 @@ const TaskDetail = () => {
             </div>
 
             <Select value={humanReviewFilter} onValueChange={(value) => setHumanReviewFilter(value as typeof humanReviewFilter)}>
-              <SelectTrigger className="w-[180px] rounded-[18px] border-stone-300 bg-white/75">
+              <SelectTrigger className="w-[180px] rounded-[18px] border-border bg-background">
                 <SelectValue placeholder="人工复核筛选" />
               </SelectTrigger>
               <SelectContent>
@@ -515,7 +515,7 @@ const TaskDetail = () => {
             </Select>
 
             <Select value={confidenceFilter} onValueChange={(value) => setConfidenceFilter(value as typeof confidenceFilter)}>
-              <SelectTrigger className="w-[180px] rounded-[18px] border-stone-300 bg-white/75">
+              <SelectTrigger className="w-[180px] rounded-[18px] border-border bg-background">
                 <SelectValue placeholder="置信度筛选" />
               </SelectTrigger>
               <SelectContent>
@@ -557,8 +557,8 @@ const TaskDetail = () => {
                   ) : tabFiltered.length === 0 ? (
                     <p className="p-4 text-sm text-muted-foreground">当前筛选条件下暂无问题。</p>
                   ) : (
-                    <div className="overflow-hidden rounded-[24px] border border-stone-200/90 bg-white/82">
-                      <div className="divide-y divide-stone-200/90">{tabFiltered.map(renderIssueRow)}</div>
+            <div className="overflow-hidden rounded-[24px] border border-border/80 bg-background/80">
+              <div className="divide-y divide-border/80">{tabFiltered.map(renderIssueRow)}</div>
                     </div>
                   )}
                 </TabsContent>
@@ -591,7 +591,7 @@ const TaskDetail = () => {
 
                 <div>
                   <Label className="text-xs text-muted-foreground">原文定位</Label>
-                  <p className="mt-2 rounded-[18px] border border-stone-200/90 bg-white/82 p-4 text-sm leading-7 text-stone-700">
+                        <p className="mt-2 rounded-[18px] border border-border/80 bg-background/80 p-4 text-sm leading-7 text-foreground">
                     {selectedIssue.location} - {selectedIssue.project}
                   </p>
                 </div>
@@ -610,7 +610,7 @@ const TaskDetail = () => {
                   <Label className="text-xs text-muted-foreground">引用依据</Label>
                   <div className="mt-2 space-y-2">
                     {selectedIssue.references.map((reference) => (
-                      <p key={reference} className="rounded-[18px] border border-stone-200/90 bg-white/82 px-4 py-3 text-sm text-stone-700">
+                                    <p key={reference} className="rounded-[18px] border border-border/80 bg-background/80 px-4 py-3 text-sm text-foreground">
                         {reference}
                       </p>
                     ))}
@@ -693,20 +693,20 @@ const TaskDetail = () => {
                   <Label className="text-xs text-muted-foreground">复核历史</Label>
                   <div className="mt-2 space-y-2">
                     {selectedIssue.reviewLogs.length === 0 && (
-                      <div className="rounded-[18px] border border-dashed border-stone-300 p-4 text-sm text-muted-foreground">
+                          <div className="rounded-[18px] border border-dashed border-border p-4 text-sm text-muted-foreground">
                         还没有复核记录。
                       </div>
                     )}
                     {selectedIssue.reviewLogs.map((log) => (
-                      <div key={log.id} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                            <div key={log.id} className="rounded-[18px] border border-border/80 bg-background/80 p-4">
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <Badge variant="outline">{formatReviewAction(log.action)}</Badge>
                           {log.status && <Badge variant="outline">{log.status}</Badge>}
                           <span>{log.reviewer}</span>
                           <span>·</span>
                           <span>{new Date(log.createdAt).toLocaleString()}</span>
                         </div>
-                        <p className="mt-3 text-sm leading-7 text-stone-700">{log.note}</p>
+                              <p className="mt-3 text-sm leading-7 text-foreground">{log.note}</p>
                       </div>
                     ))}
                   </div>

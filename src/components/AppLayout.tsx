@@ -24,6 +24,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { theme, setTheme } = useTheme();
   const isHome = location.pathname === "/";
+  const isProjectsPage = location.pathname === "/projects";
   const currentTheme = (theme as AppTheme) || "editorial";
 
   const activeTheme = useMemo(
@@ -32,23 +33,28 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   );
 
   const renderThemeSwitcher = (compact = false) => (
-    <div className={`theme-switcher rounded-[22px] p-1 ${compact ? "w-full" : ""}`}>
-      <div className={`flex ${compact ? "w-full flex-col gap-1" : "flex-wrap gap-1"}`}>
+    <div className={`theme-switcher rounded-[22px] ${compact ? "mx-auto p-2" : "p-1"}`}>
+      <div className={`flex ${compact ? "flex-col items-center gap-2" : "flex-wrap gap-1"}`}>
         {appThemes.map((themeOption) => (
           <button
             key={themeOption.value}
             type="button"
             data-active={String(currentTheme === themeOption.value)}
             onClick={() => setTheme(themeOption.value)}
-            className={`theme-switcher-button ${compact ? "justify-between" : ""}`}
+            className={`theme-switcher-button ${compact ? "h-10 w-10 justify-center rounded-full px-0 py-0" : ""}`}
             title={themeOption.description}
+            aria-label={`切换到${themeOption.label}`}
           >
-            <span className="flex items-center gap-2">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current/15 bg-white/10 text-[10px] font-semibold">
-                {themeOption.shortLabel}
+            {compact ? (
+              <span className="text-[11px] font-semibold">{themeOption.shortLabel}</span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current/15 bg-white/10 text-[10px] font-semibold">
+                  {themeOption.shortLabel}
+                </span>
+                <span>{themeOption.label}</span>
               </span>
-              <span>{themeOption.label}</span>
-            </span>
+            )}
           </button>
         ))}
       </div>
@@ -94,7 +100,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                 <div className="rounded-[20px] border border-border/80 bg-card/65 px-4 py-3">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     <Palette className="h-3.5 w-3.5" />
-                    主题
+                    当前主题
                   </div>
                   <p className="mt-2 text-sm font-medium text-foreground">{activeTheme.label}</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">{activeTheme.description}</p>
@@ -107,9 +113,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
         <nav className="relative flex-1 px-5 pb-5">
           <div className="surface-panel rounded-[30px] p-3">
             {!collapsed && (
-              <p className="px-3 pb-3 pt-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Navigation
-              </p>
+              <p className="px-3 pb-3 pt-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">导航</p>
             )}
 
             <div className="space-y-1.5">
@@ -156,7 +160,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
             {!collapsed && (
               <div className="mt-4 border-t border-border/80 pt-4">
-                <p className="px-3 pb-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Themes</p>
+                <p className="px-3 pb-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">主题切换</p>
                 {renderThemeSwitcher()}
               </div>
             )}
@@ -185,9 +189,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                   <img src="/logo1.png" alt="招投标文件审查中心" className="h-9 w-9 object-contain" />
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                    招投标文件审查中心
-                  </p>
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">招投标文件审查中心</p>
                   <p className="mt-1 font-display text-2xl text-foreground">文件审查中心</p>
                 </div>
               </div>
@@ -220,7 +222,11 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 
         <div
           className={
-            isHome ? "min-h-screen px-5 py-5 md:px-8 md:py-7" : "mx-auto max-w-[1120px] px-5 py-6 md:px-8 md:py-8"
+            isHome
+              ? "min-h-screen px-5 py-5 md:px-8 md:py-7"
+              : isProjectsPage
+                ? "mx-auto max-w-[1280px] px-5 py-6 md:px-8 md:py-8"
+                : "mx-auto max-w-[1120px] px-5 py-6 md:px-8 md:py-8"
           }
         >
           {children}

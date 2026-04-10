@@ -228,7 +228,7 @@ const Regulations = () => {
                 </div>
 
                 {normalizedDraft && (
-                  <div className="space-y-4 rounded-[24px] border border-stone-200/90 bg-white/74 p-5">
+                  <div className="space-y-4 rounded-[24px] border border-border/80 bg-card/82 p-5">
                     {normalizedDraft.aiRefined?.applied && (
                       <div className="rounded-[18px] border border-primary/20 bg-primary/5 p-4 text-sm">
                         <p className="font-medium text-foreground">AI 已辅助精修本次法规草稿</p>
@@ -301,7 +301,7 @@ const Regulations = () => {
 
                       <div className="mt-2 space-y-2">
                         {normalizedDraft.sections.map((section, index) => (
-                          <div key={`${section.title}-${index}`} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
+                          <div key={`${section.title}-${index}`} className="rounded-[18px] border border-border/80 bg-background/80 p-4">
                             <div className="flex items-center gap-2">
                               <Input
                                 value={section.title}
@@ -372,7 +372,7 @@ const Regulations = () => {
                       </div>
                       <div className="mt-2 max-h-72 space-y-2 overflow-auto">
                         {normalizedDraft.chunks.map((chunk, index) => (
-                          <div key={chunk.id} className="rounded-[18px] border border-stone-200/90 bg-white/82 p-4">
+                          <div key={chunk.id} className="rounded-[18px] border border-border/80 bg-background/80 p-4">
                             <div className="mb-2 flex items-center justify-between gap-2">
                               <p className="text-xs text-muted-foreground">条目 {index + 1}</p>
                               <div className="flex gap-2">
@@ -417,7 +417,7 @@ const Regulations = () => {
                             <div className="mt-2">
                               <Label className="text-xs text-muted-foreground">所属章节</Label>
                               <select
-                                className="mt-1 w-full rounded-[18px] border border-stone-300 bg-white/78 px-4 py-2.5 text-sm"
+                                className="mt-1 w-full rounded-[18px] border border-border bg-background px-4 py-2.5 text-sm"
                                 value={chunk.sectionId ?? normalizedDraft.sections[0]?.title ?? ""}
                                 onChange={(e) =>
                                   updateDraftChunks(
@@ -521,7 +521,7 @@ const Regulations = () => {
                             <Badge variant="outline" className={`text-xs ${categoryColor(regulation.category)}`}>
                               {regulation.category}
                             </Badge>
-                            {regulation.category === "演示法规" && <Badge variant="outline">Demo</Badge>}
+                            {regulation.category === "演示法规" && <Badge variant="outline">示例</Badge>}
                             <span className="text-xs text-muted-foreground">{regulation.ruleCount} 条规则</span>
                             <span className="text-xs text-muted-foreground">更新于 {regulation.updated}</span>
                           </div>

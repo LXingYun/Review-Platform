@@ -438,7 +438,7 @@ const Upload = () => {
     return (
       <div className="mx-auto max-w-5xl space-y-6 pb-10">
         {renderLead({
-          eyebrow: "Review Entry",
+          eyebrow: "审查入口",
           title: "先选择项目，再进入对应的文件审查流程",
           description: "项目类型会决定接下来进入招标审查还是投标审查，不再额外展示说明型大卡片。",
         })}
@@ -457,41 +457,28 @@ const Upload = () => {
         </div>
 
         {renderLead({
-          eyebrow: "Tender Review",
+          eyebrow: "招标审查",
           title: "上传需要审查的招标文件",
           description: "文件会先完成解析，再进入招标文件合规审查与章节级风险检查。",
         })}
 
         {renderProjectSelector()}
+        {renderDropZone("tender", "上传招标文件", tenderFiles)}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
-          <div>{renderDropZone("tender", "上传招标文件", tenderFiles)}</div>
-          <Card className="surface-panel h-fit bg-card/85">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">本轮重点检查</CardTitle>
-              <CardDescription>保留必要提示，不再占用大面积说明卡片。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {["文件完整性", "条款合规性", "评标标准合理性", "资质要求合法性", "关键时间节点"].map((item) => (
-                <div key={item} className="rounded-[18px] border border-border/80 bg-background/80 px-4 py-3 text-sm text-foreground">
-                  {item}
-                </div>
-              ))}
-              <Button
-                className="mt-3 w-full rounded-full"
-                disabled={!latestTender || tenderReviewMutation.isPending}
-                onClick={() =>
-                  latestTender &&
-                  tenderReviewMutation.mutate({
-                    projectId: selectedProjectId,
-                    tenderDocumentId: latestTender.id,
-                  })
-                }
-              >
-                {tenderReviewMutation.isPending ? "创建审查中..." : "开始审查"}
-              </Button>
-            </CardContent>
-          </Card>
+        <div className="flex justify-end">
+          <Button
+            className="rounded-full px-6"
+            disabled={!latestTender || tenderReviewMutation.isPending}
+            onClick={() =>
+              latestTender &&
+              tenderReviewMutation.mutate({
+                projectId: selectedProjectId,
+                tenderDocumentId: latestTender.id,
+              })
+            }
+          >
+            {tenderReviewMutation.isPending ? "创建审查中..." : "开始审查"}
+          </Button>
         </div>
       </div>
     );
@@ -507,7 +494,7 @@ const Upload = () => {
         </div>
 
         {renderLead({
-          eyebrow: "Bid Review",
+          eyebrow: "投标审查",
           title: "先上传招标文件，作为投标审查的参照底稿",
           description: "投标文件不会单独判断，它必须和招标要求放在同一轮审查上下文里。",
           stepBadge: "步骤 1 / 2",
@@ -515,9 +502,9 @@ const Upload = () => {
 
         {renderProjectSelector()}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px] xl:items-start">
           <div>{renderDropZone("tender", "上传招标文件", tenderFiles)}</div>
-          <Card className="surface-panel h-fit bg-card/85">
+          <Card className="surface-panel h-fit self-start bg-card/85">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">当前流程</CardTitle>
               <CardDescription>流程说明收紧为侧栏提示，不再单独占据首屏。</CardDescription>
@@ -549,7 +536,7 @@ const Upload = () => {
       </div>
 
       {renderLead({
-        eyebrow: "Bid Review",
+        eyebrow: "投标审查",
         title: "现在上传投标文件，形成完整的比对语境",
         description: "招标要求已经归档完成，接下来这份投标文件会与其进行响应性和一致性审查。",
         stepBadge: "步骤 2 / 2",
@@ -557,40 +544,38 @@ const Upload = () => {
 
       {renderProjectSelector()}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px] xl:items-start">
         <div>{renderDropZone("bid", "上传投标文件", bidFiles)}</div>
-        <div className="space-y-4">
-          <Card className="surface-panel bg-card/85">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">流程摘要</CardTitle>
-              <CardDescription>你已经完成审查前的上下文准备。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-[18px] border border-success/20 bg-success/5 px-4 py-3">
-                <p className="text-sm font-medium text-foreground">招标文件已就绪</p>
-                <p className="mt-1 text-xs text-muted-foreground">{tenderFiles.length} 个文件</p>
-              </div>
-              <div className="rounded-[18px] border border-primary/20 bg-primary px-4 py-3 text-sm text-primary-foreground">
-                02 上传投标文件
-              </div>
-              <Button
-                className="mt-3 w-full rounded-full"
-                disabled={!latestTender || !latestBid || bidReviewMutation.isPending}
-                onClick={() =>
-                  latestTender &&
-                  latestBid &&
-                  bidReviewMutation.mutate({
-                    projectId: selectedProjectId,
-                    tenderDocumentId: latestTender.id,
-                    bidDocumentId: latestBid.id,
-                  })
-                }
-              >
-                {bidReviewMutation.isPending ? "创建审查中..." : "开始审查"}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="surface-panel h-fit self-start bg-card/85">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">流程摘要</CardTitle>
+            <CardDescription>你已经完成审查前的上下文准备。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded-[18px] border border-success/20 bg-success/5 px-4 py-3">
+              <p className="text-sm font-medium text-foreground">招标文件已就绪</p>
+              <p className="mt-1 text-xs text-muted-foreground">{tenderFiles.length} 个文件</p>
+            </div>
+            <div className="rounded-[18px] border border-primary/20 bg-primary px-4 py-3 text-sm text-primary-foreground">
+              02 上传投标文件
+            </div>
+            <Button
+              className="mt-3 w-full rounded-full"
+              disabled={!latestTender || !latestBid || bidReviewMutation.isPending}
+              onClick={() =>
+                latestTender &&
+                latestBid &&
+                bidReviewMutation.mutate({
+                  projectId: selectedProjectId,
+                  tenderDocumentId: latestTender.id,
+                  bidDocumentId: latestBid.id,
+                })
+              }
+            >
+              {bidReviewMutation.isPending ? "创建审查中..." : "开始审查"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

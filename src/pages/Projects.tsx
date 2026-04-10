@@ -79,12 +79,7 @@ const Projects = () => {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="relative w-full md:max-w-md">
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="搜索项目..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-11"
-          />
+          <Input placeholder="搜索项目..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-11" />
         </div>
 
         <Dialog open={open} onOpenChange={setOpen}>
@@ -101,12 +96,7 @@ const Projects = () => {
             <div className="space-y-4 pt-2">
               <div>
                 <Label>项目名称</Label>
-                <Input
-                  placeholder="输入项目名称"
-                  className="mt-1"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
+                <Input placeholder="输入项目名称" className="mt-1" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div>
                 <Label>审查类型</Label>
@@ -151,7 +141,7 @@ const Projects = () => {
         <p className="py-8 text-sm text-muted-foreground">还没有项目，点击右上角“新建项目”开始。</p>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {projects.map((project) => (
           <Card
             key={project.id}
@@ -159,7 +149,7 @@ const Projects = () => {
           >
             <CardContent className="p-6">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4">
+                <div className="flex min-w-0 items-start gap-4">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-border/80 bg-background/80 text-primary">
                     <FolderKanban className="h-5 w-5" />
                   </div>
@@ -169,7 +159,7 @@ const Projects = () => {
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">{projectTypeNote(project.type)}</p>
                   </div>
                 </div>
-                <Badge variant="outline" className={statusStyle(project.status)}>
+                <Badge variant="outline" className={`${statusStyle(project.status)} whitespace-nowrap shrink-0`}>
                   {project.status}
                 </Badge>
               </div>
@@ -182,11 +172,11 @@ const Projects = () => {
 
               <div className="mt-5 grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
                 <div className="rounded-[18px] border border-border/80 bg-background/70 p-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Task count</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">任务数</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">{project.taskCount}</p>
                 </div>
                 <div className="rounded-[18px] border border-border/80 bg-background/70 p-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Issue count</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">问题数</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">{project.issueCount}</p>
                 </div>
               </div>

@@ -20,10 +20,10 @@ import { apiRequest } from "@/lib/api";
 import { DocumentItem, ProjectDetailItem, ReviewTaskItem, ReviewTaskResult } from "@/lib/api-types";
 
 const statusStyle = (status: ProjectDetailItem["status"]) => {
-  if (status === "进行中") return "border-stone-900/10 bg-stone-900/5 text-stone-900";
+  if (status === "进行中") return "border-primary/20 bg-primary/10 text-primary";
   if (status === "已完成") return "border-success/20 bg-success/10 text-success";
   if (status === "未完成") return "border-warning/20 bg-warning/10 text-warning";
-  return "border-stone-200 bg-white/70 text-stone-600";
+  return "border-border bg-background/80 text-muted-foreground";
 };
 
 const taskRiskBadge = (risk: ReviewTaskItem["riskLevel"]) => {
@@ -133,16 +133,18 @@ const ProjectDetail = () => {
                   <ArrowLeft className="h-5 w-5" />
                 </Link>
               </Button>
-              <span className="eyebrow">Project Detail</span>
+              <span className="eyebrow">项目详情</span>
             </div>
+
             <div className="space-y-3">
-              <h1 className="font-display text-4xl leading-[1.08] text-stone-950 md:text-5xl">{project.name}</h1>
-              <p className="max-w-2xl text-base leading-8 text-stone-600">
-                这里承接项目维度下的任务记录、文件归档和后续复核入口。你可以把它理解成当前项目的业务上下文总览页。
+              <h1 className="font-display text-4xl leading-[1.08] text-foreground md:text-5xl">{project.name}</h1>
+              <p className="max-w-2xl text-base leading-8 text-muted-foreground">
+                {project.description || "暂无项目描述"}
               </p>
             </div>
+
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={statusStyle(project.status)}>
+              <Badge variant="outline" className={`${statusStyle(project.status)} whitespace-nowrap`}>
                 {project.status}
               </Badge>
               <Badge variant="outline">{project.type}</Badge>
@@ -185,63 +187,43 @@ const ProjectDetail = () => {
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
-          <div className="rounded-[24px] border border-stone-200/90 bg-white/78 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-stone-500">Tasks</p>
-            <p className="mt-3 text-3xl font-semibold tracking-tight text-stone-950">{project.taskCount}</p>
-            <p className="mt-2 text-sm leading-6 text-stone-600">项目级任务会在这里继续汇聚成一张可追踪的列表。</p>
+          <div className="rounded-[24px] border border-border/80 bg-background/74 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">任务数</p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{project.taskCount}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">项目级任务会在这里继续汇聚成一张可追踪的列表。</p>
           </div>
-          <div className="rounded-[24px] border border-stone-200/90 bg-white/78 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-stone-500">Issues</p>
-            <p className="mt-3 text-3xl font-semibold tracking-tight text-stone-950">{project.issueCount}</p>
-            <p className="mt-2 text-sm leading-6 text-stone-600">问题数量会跟随任务执行结果实时变化，帮助你判断是否需要继续推进。</p>
+          <div className="rounded-[24px] border border-border/80 bg-background/74 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">问题数</p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{project.issueCount}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">问题数量会跟随任务执行结果实时变化，帮助你判断是否需要继续推进。</p>
           </div>
-          <div className="rounded-[24px] border border-stone-200/90 bg-white/78 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-stone-500">Documents</p>
-            <p className="mt-3 text-3xl font-semibold tracking-tight text-stone-950">{documents.length}</p>
-            <p className="mt-2 text-sm leading-6 text-stone-600">文件页数、摘要和解析方式会在项目层汇总呈现。</p>
+          <div className="rounded-[24px] border border-border/80 bg-background/74 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">文档数</p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{documents.length}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">文件页数、摘要和解析方式会在项目层统一呈现。</p>
           </div>
         </div>
       </section>
 
-      <Card className="surface-panel bg-white/72">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg text-stone-950">项目概览</CardTitle>
-          <CardDescription>项目说明会直接影响后续判断语境，因此保持描述清晰很重要。</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-[24px] border border-stone-200/90 bg-white/82 p-5">
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-stone-200 bg-stone-50 text-stone-800">
-                <FolderKanban className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-stone-950">{project.type}</h2>
-                <p className="mt-3 text-sm leading-7 text-stone-600">{project.description || "暂无项目描述"}</p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(247,242,233,0.88))]">
+        <Card className="surface-panel border-border/80 bg-card/90">
           <CardHeader className="pb-4">
-            <CardTitle className="font-display text-[28px] text-stone-950">审查任务</CardTitle>
+            <CardTitle className="font-display text-[28px] text-foreground">审查任务</CardTitle>
             <CardDescription>项目内的每一轮审查，都会在这里留下执行状态、风险级别和进入详情的入口。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {tasksLoading && <p className="text-sm text-muted-foreground">任务加载中...</p>}
             {!tasksLoading && tasks.length === 0 && <p className="text-sm text-muted-foreground">当前项目还没有审查任务。</p>}
             {tasks.map((task) => (
-              <div key={task.id} className="rounded-[24px] border border-stone-200/90 bg-white/82 p-4">
+              <div key={task.id} className="rounded-[24px] border border-border/80 bg-background/80 p-4">
                 <div className="flex flex-col gap-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-base font-semibold text-stone-950">{task.name}</p>
-                      <p className="mt-1 text-xs text-stone-500">
+                      <p className="text-base font-semibold text-foreground">{task.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {task.scenario === "tender_compliance" ? "招标审查" : "投标审查"} · {task.createdAt.slice(0, 10)}
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-stone-600">当前阶段：{task.stageLabel}</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">当前阶段：{task.stageLabel}</p>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                       <Badge variant="outline">{task.status}</Badge>
@@ -316,26 +298,26 @@ const ProjectDetail = () => {
           </CardContent>
         </Card>
 
-        <Card className="bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(247,242,233,0.88))]">
+        <Card className="surface-panel border-border/80 bg-card/90">
           <CardHeader className="pb-4">
-            <CardTitle className="font-display text-[28px] text-stone-950">文件清单</CardTitle>
+            <CardTitle className="font-display text-[28px] text-foreground">文件清单</CardTitle>
             <CardDescription>文件保持后台业务密度，但视觉上收敛成更安静的归档列表。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {documentsLoading && <p className="text-sm text-muted-foreground">文件加载中...</p>}
             {!documentsLoading && documents.length === 0 && <p className="text-sm text-muted-foreground">当前项目还没有上传文件。</p>}
             {documents.map((document) => (
-              <div key={document.id} className="rounded-[24px] border border-stone-200/90 bg-white/82 p-4">
+              <div key={document.id} className="rounded-[24px] border border-border/80 bg-background/80 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-base font-semibold text-stone-950">{document.originalName}</p>
-                    <p className="mt-2 text-xs text-stone-500">
+                    <p className="text-base font-semibold text-foreground">{document.originalName}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
                       {document.role} · {document.pageCount} 页 · {parseMethodLabel(document.parseMethod)}
                     </p>
                   </div>
                   <Badge variant="outline">{document.parseStatus}</Badge>
                 </div>
-                <p className="mt-4 rounded-[18px] border border-stone-200/80 bg-stone-50/85 p-4 text-sm leading-7 text-stone-600">
+                <p className="mt-4 rounded-[18px] border border-border/70 bg-background/88 p-4 text-sm leading-7 text-muted-foreground">
                   {document.textPreview || "暂无解析摘要"}
                 </p>
               </div>
