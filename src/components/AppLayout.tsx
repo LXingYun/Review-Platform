@@ -8,7 +8,6 @@ import {
   FileSearch,
   FolderKanban,
   LayoutDashboard,
-  Palette,
 } from "lucide-react";
 import { appThemes, type AppTheme } from "@/lib/app-themes";
 
@@ -27,14 +26,9 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const isProjectsPage = location.pathname === "/projects";
   const currentTheme = (theme as AppTheme) || "editorial";
 
-  const activeTheme = useMemo(
-    () => appThemes.find((item) => item.value === currentTheme) ?? appThemes[0],
-    [currentTheme],
-  );
-
   const renderThemeSwitcher = (compact = false) => (
-    <div className={`theme-switcher rounded-[22px] ${compact ? "mx-auto p-2" : "p-1"}`}>
-      <div className={`flex ${compact ? "flex-col items-center gap-2" : "flex-wrap gap-1"}`}>
+    <div className={`theme-switcher rounded-[22px] ${compact ? "mx-auto p-2" : "w-fit p-1"}`}>
+      <div className={`flex ${compact ? "flex-col items-center gap-2" : "items-center gap-1"}`}>
         {appThemes.map((themeOption) => (
           <button
             key={themeOption.value}
@@ -48,8 +42,8 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
             {compact ? (
               <span className="text-[11px] font-semibold">{themeOption.shortLabel}</span>
             ) : (
-              <span className="flex items-center gap-2">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current/15 bg-white/10 text-[10px] font-semibold">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-current/15 bg-white/10 text-[9px] font-semibold">
                   {themeOption.shortLabel}
                 </span>
                 <span>{themeOption.label}</span>
@@ -66,12 +60,12 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
       <aside
         className={`sidebar-shell relative hidden shrink-0 md:flex md:flex-col ${
           collapsed ? "md:w-24" : "md:w-80"
-        } transition-all duration-300`}
+        } md:sticky md:top-0 md:h-screen md:self-start transition-all duration-300`}
       >
         <div className="sidebar-glow absolute inset-x-6 top-6 h-40 rounded-[32px]" />
 
-        <div className="relative px-5 pb-5 pt-6">
-          <div className="surface-paper rounded-[30px] px-5 py-5">
+        <div className={`relative pb-5 pt-6 ${collapsed ? "px-3" : "px-5"}`}>
+          <div className={`surface-paper rounded-[30px] ${collapsed ? "px-3 py-4" : "px-5 py-5"}`}>
             {collapsed ? (
               <div className="flex items-center justify-center py-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-border/80 bg-white/85 shadow-sm">
@@ -91,32 +85,20 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                   </div>
                   <div className="space-y-2">
                     <p className="font-display text-[28px] leading-none text-foreground">招投标文件审查中心</p>
-                    <p className="max-w-[18rem] text-sm leading-6 text-muted-foreground">
-                      围绕招标文件、投标文件与法规条目的统一审查工作台。
-                    </p>
                   </div>
-                </div>
-
-                <div className="rounded-[20px] border border-border/80 bg-card/65 px-4 py-3">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    <Palette className="h-3.5 w-3.5" />
-                    当前主题
-                  </div>
-                  <p className="mt-2 text-sm font-medium text-foreground">{activeTheme.label}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{activeTheme.description}</p>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        <nav className="relative flex-1 px-5 pb-5">
-          <div className="surface-panel rounded-[30px] p-3">
+        <nav className={`relative flex-1 overflow-y-auto pb-5 ${collapsed ? "px-3" : "px-5"}`}>
+          <div className={`surface-panel rounded-[30px] ${collapsed ? "px-2 py-3" : "p-3"}`}>
             {!collapsed && (
               <p className="px-3 pb-3 pt-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">导航</p>
             )}
 
-            <div className="space-y-1.5">
+            <div className={`space-y-1.5 ${collapsed ? "flex flex-col items-center" : ""}`}>
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
 
@@ -125,7 +107,9 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                     key={item.path}
                     to={item.path}
                     title={collapsed ? item.label : undefined}
-                    className={`group flex items-center gap-3 rounded-[22px] px-3 py-3 transition-all duration-200 ${
+                    className={`group flex items-center gap-3 rounded-[22px] transition-all duration-200 ${
+                      collapsed ? "h-14 w-14 justify-center px-0 py-0" : "px-3 py-3"
+                    } ${
                       isActive
                         ? "bg-primary text-primary-foreground shadow-[0_14px_28px_-20px_rgba(24,24,27,0.55)]"
                         : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
@@ -167,7 +151,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </nav>
 
-        <div className="relative space-y-3 px-5 pb-6">
+        <div className={`sticky bottom-0 z-10 mt-auto space-y-3 bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(248,244,236,0.92)_20%,rgba(248,244,236,0.96))] pb-6 pt-4 ${collapsed ? "px-3" : "px-5"}`}>
           {collapsed && renderThemeSwitcher(true)}
           <button
             type="button"

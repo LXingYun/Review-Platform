@@ -298,8 +298,8 @@ const Upload = () => {
     </Card>
   );
 
-  const renderDropZone = (role: UploadRole, title: string, files: DocumentItem[]) => (
-    <div className="space-y-5">
+  const renderDropZone = (role: UploadRole, title: string, files: DocumentItem[], stretchPrimaryCard = false) => (
+    <div className="flex h-full flex-col gap-5">
       <input
         ref={role === "tender" ? tenderInputRef : bidInputRef}
         type="file"
@@ -314,7 +314,7 @@ const Upload = () => {
           dragActive
             ? "border-[hsl(var(--accent))] bg-background/90"
             : "border-border hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background/85"
-        } ${!selectedProjectId ? "cursor-not-allowed opacity-60" : ""}`}
+        } ${!selectedProjectId ? "cursor-not-allowed opacity-60" : ""} ${stretchPrimaryCard ? "flex-1" : ""}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -328,7 +328,7 @@ const Upload = () => {
           openPicker(role);
         }}
       >
-        <CardContent className="flex flex-col items-center justify-center px-6 py-16 text-center">
+        <CardContent className={`flex flex-col items-center justify-center px-6 py-16 text-center ${stretchPrimaryCard ? "h-full" : ""}`}>
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-border/80 bg-background text-primary">
             <UploadIcon className="h-7 w-7" />
           </div>
@@ -502,24 +502,26 @@ const Upload = () => {
 
         {renderProjectSelector()}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px] xl:items-start">
-          <div>{renderDropZone("tender", "上传招标文件", tenderFiles)}</div>
-          <Card className="surface-panel h-fit self-start bg-card/85">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px] xl:items-stretch">
+          <div className="flex h-full flex-col">{renderDropZone("tender", "上传招标文件", tenderFiles, true)}</div>
+          <Card className="surface-panel flex h-full flex-col bg-card/85">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">当前流程</CardTitle>
               <CardDescription>流程说明收紧为侧栏提示，不再单独占据首屏。</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="flex flex-1 flex-col gap-3">
               <div className="rounded-[18px] border border-primary/20 bg-primary px-4 py-3 text-sm text-primary-foreground">
                 01 上传招标文件
               </div>
               <div className="rounded-[18px] border border-border/80 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
                 02 上传投标文件
               </div>
-              <Button className="mt-3 w-full rounded-full" disabled={!latestTender} onClick={() => setStep("upload-tender-tender")}>
-                下一步
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
+              <div className="mt-auto pt-3">
+                <Button className="w-full rounded-full" disabled={!latestTender} onClick={() => setStep("upload-tender-tender")}>
+                  下一步
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -544,14 +546,14 @@ const Upload = () => {
 
       {renderProjectSelector()}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px] xl:items-start">
-        <div>{renderDropZone("bid", "上传投标文件", bidFiles)}</div>
-        <Card className="surface-panel h-fit self-start bg-card/85">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px] xl:items-stretch">
+        <div className="flex h-full flex-col">{renderDropZone("bid", "上传投标文件", bidFiles, true)}</div>
+        <Card className="surface-panel flex h-full flex-col bg-card/85">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">流程摘要</CardTitle>
             <CardDescription>你已经完成审查前的上下文准备。</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="flex flex-1 flex-col gap-3">
             <div className="rounded-[18px] border border-success/20 bg-success/5 px-4 py-3">
               <p className="text-sm font-medium text-foreground">招标文件已就绪</p>
               <p className="mt-1 text-xs text-muted-foreground">{tenderFiles.length} 个文件</p>
@@ -559,21 +561,23 @@ const Upload = () => {
             <div className="rounded-[18px] border border-primary/20 bg-primary px-4 py-3 text-sm text-primary-foreground">
               02 上传投标文件
             </div>
-            <Button
-              className="mt-3 w-full rounded-full"
-              disabled={!latestTender || !latestBid || bidReviewMutation.isPending}
-              onClick={() =>
-                latestTender &&
-                latestBid &&
-                bidReviewMutation.mutate({
-                  projectId: selectedProjectId,
-                  tenderDocumentId: latestTender.id,
-                  bidDocumentId: latestBid.id,
-                })
-              }
-            >
-              {bidReviewMutation.isPending ? "创建审查中..." : "开始审查"}
-            </Button>
+            <div className="mt-auto pt-3">
+              <Button
+                className="w-full rounded-full"
+                disabled={!latestTender || !latestBid || bidReviewMutation.isPending}
+                onClick={() =>
+                  latestTender &&
+                  latestBid &&
+                  bidReviewMutation.mutate({
+                    projectId: selectedProjectId,
+                    tenderDocumentId: latestTender.id,
+                    bidDocumentId: latestBid.id,
+                  })
+                }
+              >
+                {bidReviewMutation.isPending ? "创建审查中..." : "开始审查"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -114,98 +114,48 @@ const Dashboard = () => {
         <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,hsla(var(--accent),0.14),transparent_68%)]" />
         <div className="absolute left-0 top-20 h-48 w-48 rounded-full bg-[radial-gradient(circle,hsla(0,0%,100%,0.46),transparent_70%)]" />
 
-        <div className="relative grid items-stretch gap-10 lg:grid-cols-[minmax(0,1.35fr)_360px]">
-          <div className="flex h-full flex-col gap-8">
-            <div className="space-y-7">
-              <div className="space-y-4">
-                <span className="eyebrow">AI 审查工作台</span>
-                <div className="max-w-4xl space-y-4">
-                  <h1 className="font-display text-4xl leading-[1.05] text-foreground md:text-6xl">
-                    把招投标审查
-                    <span className="block text-[hsl(var(--accent))]">变成一条连续、可复核的工作流</span>
-                  </h1>
-                  <p className="max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
-                    这里不是传统的数据大盘，而是一张更安静的工作台首页。上传资料、推进任务、查看风险，再回到人工复核，
-                    每一步都在同一个语境里完成。
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button asChild size="lg" className="h-12 rounded-full px-6 shadow-[0_18px_34px_-22px_rgba(24,24,27,0.36)]">
-                  <Link to="/upload">
-                    立即发起审查
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="lg" className="h-12 rounded-full px-6">
-                  <Link to="/projects">
-                    查看项目池
-                    <ArrowUpRight className="h-4 w-4" />
-                  </Link>
-                </Button>
+        <div className="relative space-y-8">
+          <div className="space-y-7">
+            <div className="space-y-4">
+              <span className="eyebrow">AI 审查工作台</span>
+              <div className="max-w-4xl space-y-4">
+                <h1 className="font-display text-4xl leading-[1.05] text-foreground md:text-6xl">
+                  把招投标审查
+                  <span className="block text-[hsl(var(--accent))]">变成一条连续、可复核的工作流</span>
+                </h1>
+                <p className="max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
+                  这里不是传统的数据大盘，而是一张更安静的工作台首页。上传资料、推进任务、查看风险，再回到人工复核，
+                  每一步都在同一个语境里完成。
+                </p>
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3 md:auto-rows-fr">
-              {overviewNotes.map((note) => (
-                <div key={note.title} className="flex h-full flex-col rounded-[24px] border border-border/80 bg-background/72 p-4">
-                  <div className="mb-4 inline-flex rounded-full border border-border/80 bg-background/88 p-2.5 text-primary">
-                    <note.icon className="h-4 w-4" />
-                  </div>
-                  <h2 className="text-base font-semibold text-foreground">{note.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{note.description}</p>
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-3">
+              <Button asChild size="lg" className="h-12 rounded-full px-6 shadow-[0_18px_34px_-22px_rgba(24,24,27,0.36)]">
+                <Link to="/upload">
+                  立即发起审查
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg" className="h-12 rounded-full px-6">
+                <Link to="/projects">
+                  查看项目池
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
             </div>
           </div>
 
-          <div className="surface-panel flex h-full flex-col rounded-[30px] border-border/80 bg-card/88 p-5 shadow-[0_18px_34px_-28px_rgba(24,24,27,0.18)]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">今日视图</p>
-                <h2 className="mt-2 font-display text-3xl text-foreground">工作台总览</h2>
+          <div className="grid gap-3 md:grid-cols-3 md:auto-rows-fr">
+            {overviewNotes.map((note) => (
+              <div key={note.title} className="flex h-full flex-col rounded-[24px] border border-border/80 bg-background/72 p-4">
+                <div className="mb-4 inline-flex rounded-full border border-border/80 bg-background/88 p-2.5 text-primary">
+                  <note.icon className="h-4 w-4" />
+                </div>
+                <h2 className="text-base font-semibold text-foreground">{note.title}</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{note.description}</p>
               </div>
-              <div className="rounded-full bg-primary p-2.5 text-primary-foreground">
-                <Sparkles className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="mt-5 grid flex-1 gap-3 auto-rows-fr">
-              {isLoading &&
-                Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="rounded-[22px] border border-border/80 bg-background/78 p-4">
-                    <div className="h-3 w-24 rounded-full bg-muted" />
-                    <div className="mt-3 h-7 w-16 rounded-full bg-muted" />
-                  </div>
-                ))}
-
-              {!isLoading &&
-                stats.slice(0, 3).map((stat) => {
-                  const Icon = statIcons[stat.label as keyof typeof statIcons] ?? FolderKanban;
-
-                  return (
-                    <div key={stat.label} className="rounded-[22px] border border-border/80 bg-background/78 p-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground">{stat.label}</p>
-                          <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">{stat.value}</p>
-                        </div>
-                        <div className="rounded-full border border-border/80 bg-background p-3 text-primary">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-
-            <div className="mt-5 rounded-[22px] border border-primary/15 bg-primary px-4 py-4 text-primary-foreground">
-              <p className="text-xs uppercase tracking-[0.22em] text-primary-foreground/70">工作流</p>
-              <p className="mt-2 text-sm leading-7 text-primary-foreground/90">
-                首页负责指路，任务详情负责落地。你可以把这里理解成一张前台安静、后台高效的审查入口页。
-              </p>
-            </div>
+            ))}
           </div>
         </div>
       </section>
