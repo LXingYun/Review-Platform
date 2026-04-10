@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   FileText,
@@ -450,12 +449,6 @@ const Upload = () => {
   if (step === "upload-bid") {
     return (
       <div className="mx-auto max-w-6xl space-y-6 pb-10">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={handleBack}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </div>
-
         {renderLead({
           eyebrow: "招标审查",
           title: "上传需要审查的招标文件",
@@ -487,12 +480,6 @@ const Upload = () => {
   if (step === "upload-tender-bid") {
     return (
       <div className="mx-auto max-w-6xl space-y-6 pb-10">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={handleBack}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </div>
-
         {renderLead({
           eyebrow: "投标审查",
           title: "先上传招标文件，作为投标审查的参照底稿",
@@ -531,12 +518,6 @@ const Upload = () => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="rounded-full" onClick={handleBack}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-      </div>
-
       {renderLead({
         eyebrow: "投标审查",
         title: "现在上传投标文件，形成完整的比对语境",

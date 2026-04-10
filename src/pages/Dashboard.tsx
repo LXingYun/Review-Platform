@@ -114,7 +114,7 @@ const Dashboard = () => {
         <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-[radial-gradient(circle,hsla(var(--accent),0.14),transparent_68%)]" />
         <div className="absolute left-0 top-20 h-48 w-48 rounded-full bg-[radial-gradient(circle,hsla(0,0%,100%,0.46),transparent_70%)]" />
 
-        <div className="relative space-y-8">
+        <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_360px] xl:items-stretch">
           <div className="space-y-7">
             <div className="space-y-4">
               <span className="eyebrow">AI 审查工作台</span>
@@ -146,13 +146,15 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3 md:auto-rows-fr">
+          <div className="grid gap-3 xl:auto-rows-fr">
             {overviewNotes.map((note) => (
               <div key={note.title} className="flex h-full flex-col rounded-[24px] border border-border/80 bg-background/72 p-4">
-                <div className="mb-4 inline-flex rounded-full border border-border/80 bg-background/88 p-2.5 text-primary">
-                  <note.icon className="h-4 w-4" />
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex rounded-full border border-border/80 bg-background/88 p-2.5 text-primary">
+                    <note.icon className="h-4 w-4" />
+                  </div>
+                  <h2 className="text-base font-semibold text-foreground">{note.title}</h2>
                 </div>
-                <h2 className="text-base font-semibold text-foreground">{note.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">{note.description}</p>
               </div>
             ))}
