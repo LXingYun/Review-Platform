@@ -53,7 +53,7 @@ const UploadDocumentList = ({ files, isDeleting, onDeleteFile }: UploadDocumentL
                 </p>
               </div>
             </div>
-            <div className="ml-4 flex items-center gap-2">
+            <div className="ml-4 flex shrink-0 items-center gap-2">
               <UploadParseStatusBadge status={file.parseStatus} />
               <AlertDialog>
                 <AlertDialogTrigger asChild>

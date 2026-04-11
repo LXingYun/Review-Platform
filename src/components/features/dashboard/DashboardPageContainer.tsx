@@ -11,7 +11,7 @@ const DashboardPageContainer = () => {
     <div className="space-y-8 pb-8">
       <DashboardHero />
       <DashboardStats isLoading={isLoading} stats={data?.stats ?? []} />
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid min-w-0 gap-6 xl:grid-cols-[1.1fr_0.9fr] [&>*]:min-w-0">
         <DashboardActions />
         <DashboardRecentTasks isError={isError} isLoading={isLoading} recentTasks={data?.recentTasks ?? []} />
       </section>

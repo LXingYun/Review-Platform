@@ -26,7 +26,9 @@ const ProjectDocumentsCard = ({ documentsLoading, documents }: ProjectDocumentsC
                 {document.role} · {document.pageCount} 页 · {formatDocumentParseMethodLabel(document.parseMethod)}
               </p>
             </div>
-            <Badge variant="outline">{document.parseStatus}</Badge>
+            <Badge variant="outline" className="shrink-0 whitespace-nowrap">
+              {document.parseStatus}
+            </Badge>
           </div>
           <p className="mt-4 rounded-[18px] border border-border/70 bg-background/88 p-4 text-sm leading-7 text-muted-foreground">
             {document.textPreview || "暂无解析摘要"}

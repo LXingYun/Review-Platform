@@ -24,7 +24,7 @@ const DashboardRecentTasks = ({ isError, isLoading, recentTasks }: DashboardRece
   const navigate = useNavigate();
 
   return (
-    <Card className="surface-panel border-border/80 bg-card/85">
+    <Card className="surface-panel w-full min-w-0 border-border/80 bg-card/85">
       <CardHeader className="pb-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
