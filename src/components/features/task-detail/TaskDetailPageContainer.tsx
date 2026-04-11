@@ -37,8 +37,12 @@ const TaskDetailPageContainer = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (reviewer) {
+    const normalizedReviewer = reviewer.trim();
+
+    if (normalizedReviewer) {
       window.localStorage.setItem(reviewerStorageKey, reviewer);
+    } else {
+      window.localStorage.removeItem(reviewerStorageKey);
     }
   }, [reviewer]);
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { RegulationDraft, RegulationItem } from "@/lib/api-types";
@@ -52,31 +52,41 @@ const RegulationsPageContainer = () => {
     },
   });
 
+  const resetUploadDraftState = () => {
+    setDraft(null);
+    setEditingRegulationId(null);
+    setUploadFile(null);
+  };
+
+  const buildDraftWithSectionsAndChunks = (
+    current: RegulationDraft,
+    nextSections: RegulationDraft["sections"],
+    nextChunks: RegulationDraft["chunks"],
+  ): RegulationDraft => ({
+    ...current,
+    chunks: nextChunks,
+    ruleCount: nextChunks.length,
+    sections: nextSections.map((section, index) => ({
+      ...section,
+      rules:
+        nextChunks.filter((chunk) => (chunk.sectionId ?? nextSections[0]?.title) === section.title).length ||
+        (index === 0 ? nextChunks.filter((chunk) => !chunk.sectionId).length : 0),
+    })),
+  });
+
   const confirmDraftMutation = useSaveRegulationDraftMutation({
     onSuccess: () => {
-      setDraft(null);
-      setEditingRegulationId(null);
       setUploadOpen(false);
-      setUploadFile(null);
+      resetUploadDraftState();
     },
   });
 
-  const normalizedDraft = useMemo(() => draft, [draft]);
+  const normalizedDraft = draft;
 
   const updateDraftChunks = (chunks: RegulationDraft["chunks"]) => {
     setDraft((current) =>
       current
-        ? {
-            ...current,
-            chunks,
-            ruleCount: chunks.length,
-            sections: current.sections.map((section, index) => ({
-              ...section,
-              rules:
-                chunks.filter((chunk) => (chunk.sectionId ?? current.sections[0]?.title) === section.title).length ||
-                (index === 0 ? chunks.filter((chunk) => !chunk.sectionId).length : 0),
-            })),
-          }
+        ? buildDraftWithSectionsAndChunks(current, current.sections, chunks)
         : current,
     );
   };
@@ -84,15 +94,44 @@ const RegulationsPageContainer = () => {
   const updateDraftSections = (sections: RegulationDraft["sections"]) => {
     setDraft((current) =>
       current
-        ? {
-            ...current,
-            sections: sections.map((section) => ({
-              ...section,
-              rules: current.chunks.filter((chunk) => (chunk.sectionId ?? current.sections[0]?.title) === section.title).length,
-            })),
-          }
+        ? buildDraftWithSectionsAndChunks(current, sections, current.chunks)
         : current,
     );
+  };
+
+  const updateDraftSectionTitle = (index: number, value: string) => {
+    setDraft((current) => {
+      if (!current) return current;
+
+      const previousTitle = current.sections[index]?.title;
+      const nextSections = current.sections.map((section, sectionIndex) =>
+        sectionIndex === index ? { ...section, title: value } : section,
+      );
+      const nextChunks = previousTitle
+        ? current.chunks.map((chunk) =>
+            chunk.sectionId === previousTitle ? { ...chunk, sectionId: value } : chunk,
+          )
+        : current.chunks;
+
+      return buildDraftWithSectionsAndChunks(current, nextSections, nextChunks);
+    });
+  };
+
+  const removeDraftSection = (index: number) => {
+    setDraft((current) => {
+      if (!current || current.sections.length === 1) return current;
+
+      const removedTitle = current.sections[index]?.title;
+      const nextSections = current.sections.filter((_, sectionIndex) => sectionIndex !== index);
+      const fallbackSectionTitle = nextSections[index]?.title ?? nextSections[nextSections.length - 1]?.title;
+      const nextChunks = removedTitle
+        ? current.chunks.map((chunk) =>
+            chunk.sectionId === removedTitle ? { ...chunk, sectionId: fallbackSectionTitle } : chunk,
+          )
+        : current.chunks;
+
+      return buildDraftWithSectionsAndChunks(current, nextSections, nextChunks);
+    });
   };
 
   const moveDraftChunk = (fromIndex: number, toIndex: number) => {
@@ -139,6 +178,13 @@ const RegulationsPageContainer = () => {
     confirmDraftMutation.mutate({ draft: normalizedDraft, regulationId: editingRegulationId });
   };
 
+  const handleUploadOpenChange = (nextOpen: boolean) => {
+    setUploadOpen(nextOpen);
+    if (!nextOpen) {
+      resetUploadDraftState();
+    }
+  };
+
   const handleEditRegulation = (regulation: RegulationItem) => {
     setEditingRegulationId(regulation.id);
     setUploadOpen(true);
@@ -170,7 +216,7 @@ const RegulationsPageContainer = () => {
             draft={normalizedDraft}
             previewPending={uploadRegulationMutation.isPending}
             confirmPending={confirmDraftMutation.isPending}
-            onOpenChange={setUploadOpen}
+            onOpenChange={handleUploadOpenChange}
             onUploadFileChange={(file) => {
               setUploadFile(file);
               setDraft(null);
@@ -193,9 +239,7 @@ const RegulationsPageContainer = () => {
             }
             onUpdateSectionTitle={(index, value) =>
               normalizedDraft &&
-              updateDraftSections(
-                normalizedDraft.sections.map((item, itemIndex) => (itemIndex === index ? { ...item, title: value } : item)),
-              )
+              updateDraftSectionTitle(index, value)
             }
             onUpdateSectionRules={(index, value) =>
               normalizedDraft &&
@@ -210,9 +254,7 @@ const RegulationsPageContainer = () => {
                 ),
               )
             }
-            onRemoveSection={(index) =>
-              normalizedDraft && updateDraftSections(normalizedDraft.sections.filter((_, itemIndex) => itemIndex !== index))
-            }
+            onRemoveSection={(index) => normalizedDraft && removeDraftSection(index)}
             onAddChunk={() =>
               normalizedDraft &&
               updateDraftChunks([
