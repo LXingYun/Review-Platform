@@ -42,7 +42,7 @@ const ProjectTasksCard = ({
   <Card className="surface-panel border-border/80 bg-card/90">
     <CardHeader className="pb-4">
       <CardTitle className="font-display text-[28px] text-foreground">审查任务</CardTitle>
-      <CardDescription>项目内的每一轮审查，都会在这里留下执行状态、风险级别和进入详情的入口。</CardDescription>
+      <CardDescription>查看本项目的历史审查记录、风险评级，并点击进入复核详情。</CardDescription>
     </CardHeader>
     <CardContent className="space-y-3">
       {tasksLoading && <p className="text-sm text-muted-foreground">任务加载中...</p>}

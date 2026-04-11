@@ -173,8 +173,8 @@ const UploadPageContainer = () => {
       <div className="mx-auto max-w-5xl space-y-6 pb-10">
         <UploadLead
           eyebrow="审查入口"
-          title="先选择项目，再进入对应的文件审查流程"
-          description="项目类型会决定接下来进入招标审查还是投标审查，不再额外展示说明型大卡片。"
+          title="请先选择对应项目，再发起文件审查"
+          description="系统将根据您选择的“项目类型”，自动匹配并进入【招标审查】或【投标审查】流程。"
         />
         {renderProjectSelector()}
       </div>

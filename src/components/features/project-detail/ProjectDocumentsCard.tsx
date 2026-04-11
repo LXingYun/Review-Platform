@@ -12,7 +12,7 @@ const ProjectDocumentsCard = ({ documentsLoading, documents }: ProjectDocumentsC
   <Card className="surface-panel border-border/80 bg-card/90">
     <CardHeader className="pb-4">
       <CardTitle className="font-display text-[28px] text-foreground">文件清单</CardTitle>
-      <CardDescription>文件保持后台业务密度，但视觉上收敛成更安静的归档列表。</CardDescription>
+      <CardDescription>集中管理该项目下的所有相关文档，支持快速预览与下载。</CardDescription>
     </CardHeader>
     <CardContent className="space-y-3">
       {documentsLoading && <p className="text-sm text-muted-foreground">文件加载中...</p>}

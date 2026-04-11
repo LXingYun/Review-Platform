@@ -97,17 +97,17 @@ const ProjectDetailHero = ({
       <div className="rounded-[24px] border border-border/80 bg-background/74 p-4">
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">任务数</p>
         <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{project.taskCount}</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">项目级任务会在这里继续汇聚成一张可追踪的列表。</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">当前项目下发起的所有审查任务及其执行状态。</p>
       </div>
       <div className="rounded-[24px] border border-border/80 bg-background/74 p-4">
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">问题数</p>
         <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{project.issueCount}</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">问题数量会跟随任务执行结果实时变化，帮助你判断是否需要继续推进。</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">AI 审查发现的潜在风险或不合规问题总计。</p>
       </div>
       <div className="rounded-[24px] border border-border/80 bg-background/74 p-4">
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">文档数</p>
         <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">{documentsCount}</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">文件页数、摘要和解析方式会在项目层统一呈现。</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">该项目下已上传的所有招投标文件及支持性附件。</p>
       </div>
     </div>
   </section>
