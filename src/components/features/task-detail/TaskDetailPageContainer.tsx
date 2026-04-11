@@ -7,9 +7,9 @@ import {
   useAddFindingReviewLogMutation,
   useDeleteReviewTaskMutation,
   useDocumentsQuery,
-  useFindingsQuery,
   useReviewTasksQuery,
   useRetryReviewTaskMutation,
+  useTaskFindingsQuery,
   useUpdateFindingStatusMutation,
 } from "@/hooks/queries";
 import FindingDetailDialog from "./FindingDetailDialog";
@@ -54,8 +54,10 @@ const TaskDetailPageContainer = () => {
     enabled: Boolean(task?.projectId),
   });
 
-  const { data: findings = [], isLoading: findingsLoading } = useFindingsQuery({
-    filters: { projectId: task?.projectId, scenario: task?.scenario, taskId },
+  const { data: findings = [], isLoading: findingsLoading } = useTaskFindingsQuery({
+    projectId: task?.projectId,
+    scenario: task?.scenario,
+    taskId,
     enabled: Boolean(task?.projectId && task?.scenario),
     refetchInterval: task && (task.status === "待审核" || task.status === "进行中") ? 3000 : false,
   });

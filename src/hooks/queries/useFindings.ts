@@ -1,13 +1,19 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import type { FindingListItem } from "@/lib/api-types";
 import { MutationCallbacks, invalidateQueryKeys, toError } from "./mutationUtils";
-import { type FindingsQueryFilters, queryKeys } from "./queryKeys";
+import { type FindingsSourceFilters, queryKeys } from "./queryKeys";
 
 export interface FindingsQueryOptions {
-  filters?: FindingsQueryFilters;
+  projectId?: string;
+  scenario?: FindingListItem["scenario"];
   enabled?: boolean;
   refetchInterval?: number | false;
+}
+
+export interface TaskFindingsQueryOptions extends FindingsQueryOptions {
+  taskId?: string;
 }
 
 export interface UpdateFindingStatusInput {
@@ -23,38 +29,56 @@ export interface AddFindingReviewLogInput {
   reviewer: string;
 }
 
-const getFindingsPath = (filters: FindingsQueryFilters = {}) => {
+const getFindingsPath = ({ projectId, scenario }: FindingsSourceFilters = {}) => {
   const params = new URLSearchParams();
-  const search = filters.search?.trim();
 
-  if (search) params.set("search", search);
-  if (filters.status) params.set("status", filters.status);
-  if (filters.projectId) params.set("projectId", filters.projectId);
-  if (filters.scenario) params.set("scenario", filters.scenario);
+  if (projectId) params.set("projectId", projectId);
+  if (scenario) params.set("scenario", scenario);
 
   const queryString = params.toString();
   return queryString ? `/findings?${queryString}` : "/findings";
 };
 
 export const useFindingsQuery = ({
-  filters = {},
+  projectId,
+  scenario,
   enabled = true,
   refetchInterval,
 }: FindingsQueryOptions = {}) =>
   useQuery({
-    queryKey: queryKeys.findings.list(filters),
-    queryFn: async () => {
-      const findings = await apiRequest<FindingListItem[]>(getFindingsPath(filters));
+    queryKey: queryKeys.findings.list({ projectId, scenario }),
+    queryFn: () => apiRequest<FindingListItem[]>(getFindingsPath({ projectId, scenario })),
+    enabled: enabled && (!projectId || Boolean(projectId)) && (!scenario || Boolean(scenario)),
+    refetchInterval,
+  });
 
-      if (filters.taskId) {
-        return findings.filter((finding) => finding.taskId === filters.taskId);
-      }
-
-      return findings;
-    },
+export const useTaskFindingsQuery = ({
+  taskId,
+  projectId,
+  scenario,
+  enabled = true,
+  refetchInterval,
+}: TaskFindingsQueryOptions = {}) => {
+  const query = useFindingsQuery({
+    projectId,
+    scenario,
     enabled,
     refetchInterval,
   });
+
+  const allFindings = useMemo(() => query.data ?? [], [query.data]);
+  const taskFindings = useMemo(
+    () => (taskId ? allFindings.filter((finding) => finding.taskId === taskId) : allFindings),
+    [allFindings, taskId],
+  );
+
+  return {
+    ...query,
+    allFindings,
+    taskFindings,
+    data: taskFindings,
+  };
+};
 
 export const useUpdateFindingStatusMutation = (
   callbacks: MutationCallbacks<FindingListItem, UpdateFindingStatusInput> = {},

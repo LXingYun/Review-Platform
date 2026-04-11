@@ -1,21 +1,15 @@
-import type { FindingStatus, ReviewScenario } from "@/lib/api-types";
+import type { ReviewScenario } from "@/lib/api-types";
 
-export interface FindingsQueryFilters {
-  search?: string;
-  status?: FindingStatus;
+export interface FindingsSourceFilters {
   projectId?: string;
   scenario?: ReviewScenario;
-  taskId?: string;
 }
 
 const normalizeSearch = (search?: string) => search?.trim() ?? "";
 
-const normalizeFindingsFilters = (filters: FindingsQueryFilters = {}) => ({
-  search: normalizeSearch(filters.search),
-  status: filters.status ?? "",
+const normalizeFindingsSourceFilters = (filters: FindingsSourceFilters = {}) => ({
   projectId: filters.projectId ?? "",
   scenario: filters.scenario ?? "",
-  taskId: filters.taskId ?? "",
 });
 
 const dashboardAll = ["dashboard"] as const;
@@ -43,7 +37,7 @@ export const queryKeys = {
   },
   findings: {
     all: findingsAll,
-    list: (filters: FindingsQueryFilters = {}) => [...findingsAll, "list", normalizeFindingsFilters(filters)] as const,
+    list: (filters: FindingsSourceFilters = {}) => [...findingsAll, "list", normalizeFindingsSourceFilters(filters)] as const,
   },
   regulations: {
     all: regulationsAll,
