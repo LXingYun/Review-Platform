@@ -14,7 +14,14 @@ import {
   previewRegulationFromFile,
   updateRegulation,
 } from "./services/regulation-service";
-import { abortReviewTask, createReviewTask, deleteReviewTask, listTasks, retryReviewTask } from "./services/review-service";
+import {
+  abortReviewTask,
+  createReviewTask,
+  deleteReviewTask,
+  getTask,
+  listTasks,
+  retryReviewTask,
+} from "./services/review-service";
 import {
   createBidReviewSchema,
   createFindingReviewLogSchema,
@@ -84,6 +91,10 @@ export const createApp = () => {
     res.json(listTasks(projectId));
   });
 
+  app.get("/api/review-tasks/:taskId", (req, res) => {
+    res.json(getTask(req.params.taskId));
+  });
+
   app.delete("/api/review-tasks/:taskId", (req, res) => {
     res.json(deleteReviewTask(req.params.taskId));
   });
@@ -125,6 +136,7 @@ export const createApp = () => {
         status: req.query.status ? (String(req.query.status) as never) : undefined,
         projectId: req.query.projectId ? String(req.query.projectId) : undefined,
         scenario: req.query.scenario ? (String(req.query.scenario) as never) : undefined,
+        taskId: req.query.taskId ? String(req.query.taskId) : undefined,
       }),
     );
   });

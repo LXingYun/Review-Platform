@@ -10,6 +10,11 @@ export interface ReviewTasksQueryOptions {
   refetchInterval?: number | false;
 }
 
+export interface ReviewTaskQueryOptions {
+  enabled?: boolean;
+  refetchInterval?: number | false;
+}
+
 export interface CreateTenderReviewInput {
   projectId: string;
   tenderDocumentId: string;
@@ -53,6 +58,24 @@ export const useReviewTasksQuery = ({
     queryFn: () => apiRequest<ReviewTaskDetailItem[]>(getReviewTasksPath(projectId)),
     enabled: enabled && (!projectId || Boolean(projectId)),
     refetchInterval,
+  });
+
+export const useReviewTaskQuery = (
+  taskId?: string,
+  { enabled = true, refetchInterval }: ReviewTaskQueryOptions = {},
+) =>
+  useQuery({
+    queryKey: queryKeys.reviewTasks.detail(taskId),
+    queryFn: () => apiRequest<ReviewTaskDetailItem>(`/review-tasks/${taskId}`),
+    enabled: enabled && Boolean(taskId),
+    refetchInterval: (query) => {
+      if (refetchInterval !== undefined) {
+        return refetchInterval;
+      }
+
+      const task = query.state.data;
+      return task && (task.status === "待审核" || task.status === "进行中") ? 3000 : false;
+    },
   });
 
 export const useCreateTenderReviewMutation = (

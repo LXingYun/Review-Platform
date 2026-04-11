@@ -68,6 +68,7 @@ export const listFindings = (params?: {
   status?: FindingStatus;
   projectId?: string;
   scenario?: ReviewScenario;
+  taskId?: string;
 }) => {
   const { data, documentChunkMap, regulationChunkMap } = mapDocumentChunkById();
   const keyword = params?.search?.trim();
@@ -77,6 +78,7 @@ export const listFindings = (params?: {
       if (params?.status && finding.status !== params.status) return false;
       if (params?.projectId && finding.projectId !== params.projectId) return false;
       if (params?.scenario && finding.scenario !== params.scenario) return false;
+      if (params?.taskId && finding.taskId !== params.taskId) return false;
       if (!keyword) return true;
 
       const projectName = data.projects.find((project) => project.id === finding.projectId)?.name ?? "";

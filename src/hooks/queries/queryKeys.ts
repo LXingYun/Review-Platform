@@ -3,6 +3,7 @@ import type { ReviewScenario } from "@/lib/api-types";
 export interface FindingsSourceFilters {
   projectId?: string;
   scenario?: ReviewScenario;
+  taskId?: string;
 }
 
 const normalizeSearch = (search?: string) => search?.trim() ?? "";
@@ -10,6 +11,7 @@ const normalizeSearch = (search?: string) => search?.trim() ?? "";
 const normalizeFindingsSourceFilters = (filters: FindingsSourceFilters = {}) => ({
   projectId: filters.projectId ?? "",
   scenario: filters.scenario ?? "",
+  taskId: filters.taskId ?? "",
 });
 
 const dashboardAll = ["dashboard"] as const;
@@ -34,6 +36,7 @@ export const queryKeys = {
   reviewTasks: {
     all: reviewTasksAll,
     list: (projectId?: string | null) => [...reviewTasksAll, "list", { projectId: projectId ?? "" }] as const,
+    detail: (taskId?: string | null) => [...reviewTasksAll, "detail", { taskId: taskId ?? "" }] as const,
   },
   findings: {
     all: findingsAll,

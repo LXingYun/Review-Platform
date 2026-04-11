@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import type { FindingListItem } from "@/lib/api-types";
@@ -8,12 +7,15 @@ import { type FindingsSourceFilters, queryKeys } from "./queryKeys";
 export interface FindingsQueryOptions {
   projectId?: string;
   scenario?: FindingListItem["scenario"];
+  taskId?: string;
   enabled?: boolean;
   refetchInterval?: number | false;
 }
 
-export interface TaskFindingsQueryOptions extends FindingsQueryOptions {
+export interface TaskFindingsQueryOptions {
   taskId?: string;
+  enabled?: boolean;
+  refetchInterval?: number | false;
 }
 
 export interface UpdateFindingStatusInput {
@@ -29,11 +31,12 @@ export interface AddFindingReviewLogInput {
   reviewer: string;
 }
 
-const getFindingsPath = ({ projectId, scenario }: FindingsSourceFilters = {}) => {
+const getFindingsPath = ({ projectId, scenario, taskId }: FindingsSourceFilters = {}) => {
   const params = new URLSearchParams();
 
   if (projectId) params.set("projectId", projectId);
   if (scenario) params.set("scenario", scenario);
+  if (taskId) params.set("taskId", taskId);
 
   const queryString = params.toString();
   return queryString ? `/findings?${queryString}` : "/findings";
@@ -42,43 +45,31 @@ const getFindingsPath = ({ projectId, scenario }: FindingsSourceFilters = {}) =>
 export const useFindingsQuery = ({
   projectId,
   scenario,
+  taskId,
   enabled = true,
   refetchInterval,
 }: FindingsQueryOptions = {}) =>
   useQuery({
-    queryKey: queryKeys.findings.list({ projectId, scenario }),
-    queryFn: () => apiRequest<FindingListItem[]>(getFindingsPath({ projectId, scenario })),
-    enabled: enabled && (!projectId || Boolean(projectId)) && (!scenario || Boolean(scenario)),
+    queryKey: queryKeys.findings.list({ projectId, scenario, taskId }),
+    queryFn: () => apiRequest<FindingListItem[]>(getFindingsPath({ projectId, scenario, taskId })),
+    enabled:
+      enabled &&
+      (!projectId || Boolean(projectId)) &&
+      (!scenario || Boolean(scenario)) &&
+      (!taskId || Boolean(taskId)),
     refetchInterval,
   });
 
 export const useTaskFindingsQuery = ({
   taskId,
-  projectId,
-  scenario,
   enabled = true,
   refetchInterval,
-}: TaskFindingsQueryOptions = {}) => {
-  const query = useFindingsQuery({
-    projectId,
-    scenario,
-    enabled,
+}: TaskFindingsQueryOptions = {}) =>
+  useFindingsQuery({
+    taskId,
+    enabled: enabled && Boolean(taskId),
     refetchInterval,
   });
-
-  const allFindings = useMemo(() => query.data ?? [], [query.data]);
-  const taskFindings = useMemo(
-    () => (taskId ? allFindings.filter((finding) => finding.taskId === taskId) : allFindings),
-    [allFindings, taskId],
-  );
-
-  return {
-    ...query,
-    allFindings,
-    taskFindings,
-    data: taskFindings,
-  };
-};
 
 export const useUpdateFindingStatusMutation = (
   callbacks: MutationCallbacks<FindingListItem, UpdateFindingStatusInput> = {},

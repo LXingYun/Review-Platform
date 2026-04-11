@@ -13,7 +13,6 @@ interface RegulationDraftEditorProps {
   onTextPreviewChange: (value: string) => void;
   onAddSection: () => void;
   onUpdateSectionTitle: (index: number, value: string) => void;
-  onUpdateSectionRules: (index: number, value: number) => void;
   onRemoveSection: (index: number) => void;
   onAddChunk: () => void;
   onMoveChunk: (fromIndex: number, toIndex: number) => void;
@@ -30,7 +29,6 @@ const RegulationDraftEditor = ({
   onTextPreviewChange,
   onAddSection,
   onUpdateSectionTitle,
-  onUpdateSectionRules,
   onRemoveSection,
   onAddChunk,
   onMoveChunk,
@@ -83,11 +81,9 @@ const RegulationDraftEditor = ({
           <div key={`${section.title}-${index}`} className="rounded-[18px] border border-border/80 bg-background/80 p-4">
             <div className="flex items-center gap-2">
               <Input value={section.title} onChange={(e) => onUpdateSectionTitle(index, e.target.value)} />
-              <Input
-                className="w-28"
-                value={String(section.rules)}
-                onChange={(e) => onUpdateSectionRules(index, Number.isNaN(Number(e.target.value)) ? 0 : Number(e.target.value))}
-              />
+              <div className="flex h-10 w-28 items-center rounded-md border border-border bg-muted/40 px-3 text-sm text-muted-foreground">
+                {section.rules} 条
+              </div>
               <Button
                 type="button"
                 variant="outline"

@@ -89,6 +89,7 @@ export interface RegulationDraft {
     text: string;
     order: number;
     sectionId?: string;
+    sectionTitle?: string;
   }>;
   sections: RegulationSection[];
   aiRefined?: {

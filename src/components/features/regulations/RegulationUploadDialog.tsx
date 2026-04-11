@@ -30,7 +30,6 @@ interface RegulationUploadDialogProps {
   onTextPreviewChange: (value: string) => void;
   onAddSection: () => void;
   onUpdateSectionTitle: (index: number, value: string) => void;
-  onUpdateSectionRules: (index: number, value: number) => void;
   onRemoveSection: (index: number) => void;
   onAddChunk: () => void;
   onMoveChunk: (fromIndex: number, toIndex: number) => void;
@@ -55,7 +54,6 @@ const RegulationUploadDialog = ({
   onTextPreviewChange,
   onAddSection,
   onUpdateSectionTitle,
-  onUpdateSectionRules,
   onRemoveSection,
   onAddChunk,
   onMoveChunk,
@@ -95,7 +93,6 @@ const RegulationUploadDialog = ({
             onTextPreviewChange={onTextPreviewChange}
             onAddSection={onAddSection}
             onUpdateSectionTitle={onUpdateSectionTitle}
-            onUpdateSectionRules={onUpdateSectionRules}
             onRemoveSection={onRemoveSection}
             onAddChunk={onAddChunk}
             onMoveChunk={onMoveChunk}

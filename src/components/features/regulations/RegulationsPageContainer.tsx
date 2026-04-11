@@ -46,7 +46,7 @@ const RegulationsPageContainer = () => {
         ...preview,
         chunks: preview.chunks.map((chunk) => ({
           ...chunk,
-          sectionId: initialSectionTitle,
+          sectionId: chunk.sectionId ?? chunk.sectionTitle ?? initialSectionTitle,
         })),
       });
     },
@@ -240,19 +240,6 @@ const RegulationsPageContainer = () => {
             onUpdateSectionTitle={(index, value) =>
               normalizedDraft &&
               updateDraftSectionTitle(index, value)
-            }
-            onUpdateSectionRules={(index, value) =>
-              normalizedDraft &&
-              updateDraftSections(
-                normalizedDraft.sections.map((item, itemIndex) =>
-                  itemIndex === index
-                    ? {
-                        ...item,
-                        rules: value,
-                      }
-                    : item,
-                ),
-              )
             }
             onRemoveSection={(index) => normalizedDraft && removeDraftSection(index)}
             onAddChunk={() =>

@@ -7,7 +7,7 @@ import {
   useAddFindingReviewLogMutation,
   useDeleteReviewTaskMutation,
   useDocumentsQuery,
-  useReviewTasksQuery,
+  useReviewTaskQuery,
   useRetryReviewTaskMutation,
   useTaskFindingsQuery,
   useUpdateFindingStatusMutation,
@@ -50,8 +50,9 @@ const TaskDetailPageContainer = () => {
     setReviewNote("");
   }, [selectedIssue?.id]);
 
-  const { data: tasks = [], isLoading: tasksLoading } = useReviewTasksQuery({ refetchInterval: 3000 });
-  const task = useMemo(() => tasks.find((item) => item.id === taskId), [tasks, taskId]);
+  const { data: task, isLoading: tasksLoading } = useReviewTaskQuery(taskId, {
+    enabled: Boolean(taskId),
+  });
 
   const { data: documents = [], isLoading: documentsLoading } = useDocumentsQuery({
     projectId: task?.projectId,
@@ -59,10 +60,8 @@ const TaskDetailPageContainer = () => {
   });
 
   const { data: findings = [], isLoading: findingsLoading } = useTaskFindingsQuery({
-    projectId: task?.projectId,
-    scenario: task?.scenario,
     taskId,
-    enabled: Boolean(task?.projectId && task?.scenario),
+    enabled: Boolean(taskId),
     refetchInterval: task && (task.status === "待审核" || task.status === "进行中") ? 3000 : false,
   });
 

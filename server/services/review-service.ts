@@ -395,6 +395,20 @@ export const listTasks = (projectId?: string) => {
     }));
 };
 
+export const getTask = (taskId: string) => {
+  const data = store.get();
+  const task = data.reviewTasks.find((item) => item.id === taskId);
+
+  if (!task) {
+    throw new Error("审查任务不存在");
+  }
+
+  return {
+    ...task,
+    projectName: data.projects.find((project) => project.id === task.projectId)?.name ?? "未知项目",
+  };
+};
+
 export const createReviewTask = async (params: {
   projectId: string;
   scenario: ReviewScenario;
