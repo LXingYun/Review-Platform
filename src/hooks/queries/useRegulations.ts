@@ -4,7 +4,7 @@ import type { RegulationDraft, RegulationItem } from "@/lib/api-types";
 import { MutationCallbacks, invalidateQueryKeys, toError } from "./mutationUtils";
 import { queryKeys } from "./queryKeys";
 
-export interface CreateRegulationInput extends Omit<RegulationItem, "id"> {}
+export type CreateRegulationInput = Omit<RegulationItem, "id">;
 
 export interface SaveRegulationDraftInput {
   draft: RegulationDraft;
