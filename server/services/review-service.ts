@@ -7,9 +7,9 @@ import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
 import { getTaskRegulationsForExecution, resolveTaskRegulationContext } from "./review-context-service";
 import { createId, nowIso, summarizeRisk } from "../utils";
 import { getReviewTaskStageLabel } from "./review-task-stage-service";
+import { toDeterministicSeed } from "./review-seed-service";
 
-const minimumVisibleDuration = 4500;
-const workerConcurrency = Math.max(1, Number(process.env.REVIEW_WORKER_CONCURRENCY ?? 2));
+const workerConcurrency = 1;
 
 interface RunningTaskExecution {
   attemptCount: number;
@@ -225,6 +225,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
 
   const data = store.get();
   const project = data.projects.find((item) => item.id === task.projectId);
+  const projectReviewSeed = project ? toDeterministicSeed(project.id) : undefined;
   if (!project) {
     markTaskFailed(taskId, attemptCount, "项目不存在");
     return;
@@ -245,6 +246,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
   try {
     const latest = store.get();
     const aiConfig = getAiConfig();
+    const minimumVisibleDuration = aiConfig.reviewMinVisibleDurationMs;
     const reviewExecutionMode = resolveReviewExecutionMode({
       aiEnabled: aiConfig.enabled,
     });
@@ -275,6 +277,11 @@ const runReviewTaskInBackground = async (taskId: string) => {
         taskId,
         tenderDocument,
         regulations: taskRegulations,
+        chapterConcurrency: {
+          initial: aiConfig.chapterReviewConcurrency,
+          min: aiConfig.chapterReviewMinConcurrency,
+        },
+        seed: projectReviewSeed,
         signal: execution.controller.signal,
         onProgress: ({ current, total, chapterTitle, stage }) => {
           updateRunningTask(taskId, attemptCount, (currentTask) => ({
@@ -312,6 +319,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
         taskId,
         documents: taskDocuments,
         regulations: taskRegulations,
+        seed: projectReviewSeed,
         signal: execution.controller.signal,
       });
     }

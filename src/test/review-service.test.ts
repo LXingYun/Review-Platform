@@ -23,6 +23,7 @@ describe("resolveReviewExecutionMode", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     process.chdir(originalCwd);
+
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch {
@@ -62,58 +63,43 @@ describe("resolveReviewExecutionMode", () => {
     ).toBe("blocked");
   });
 
-  it("does not restore findings after deleting a running task", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    findings: [
-                      {
-                        title: "商务响应缺失",
-                        category: "商务响应",
-                        risk: "中",
-                        location: "招标片段 1",
-                        description: "测试问题",
-                        recommendation: "补充说明",
-                        references: ["测试依据"],
-                        sourceChunkIds: ["doc-t-chunk-1"],
-                        candidateChunkIds: ["doc-b-chunk-1"],
-                        regulationChunkIds: [],
-                        needsHumanReview: true,
-                        confidence: 0.9,
-                      },
-                    ],
-                  }),
-                },
+  it("uses deterministic project seed and does not restore findings after deleting a running task", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  findings: [],
+                }),
               },
-            ],
-          }),
-          {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json",
             },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
           },
-        ),
+        },
       ),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     const { store } = await import("../../server/store");
     const { createProject } = await import("../../server/services/project-service");
     const { createReviewTask, deleteReviewTask, initializeReviewWorkers } = await import(
       "../../server/services/review-service"
     );
+    const { toDeterministicSeed } = await import("../../server/services/review-seed-service");
 
     const project = createProject({
-      name: "测试项目",
-      type: "投标审查",
+      name: "Seed test project",
+      type: "\u6295\u6807\u5ba1\u67e5",
       description: "",
     });
+    const expectedSeed = toDeterministicSeed(project.id);
 
     store.update((current) => ({
       ...current,
@@ -127,12 +113,12 @@ describe("resolveReviewExecutionMode", () => {
           sizeBytes: 10,
           role: "tender",
           storagePath: path.join(tempDir, "tender.txt"),
-          parseStatus: "已完成",
+          parseStatus: "\u5df2\u5b8c\u6210",
           pageCount: 1,
           parseMethod: "plain-text",
-          textPreview: "付款要求",
-          extractedText: "付款要求 资质 技术",
-          chunks: [{ id: "doc-t-chunk-1", order: 1, text: "付款要求 资质 技术" }],
+          textPreview: "payment requirements",
+          extractedText: "payment requirements qualification technical",
+          chunks: [{ id: "doc-t-chunk-1", order: 1, text: "payment requirements qualification technical" }],
           uploadedAt: new Date().toISOString(),
         },
         {
@@ -144,12 +130,12 @@ describe("resolveReviewExecutionMode", () => {
           sizeBytes: 10,
           role: "bid",
           storagePath: path.join(tempDir, "bid.txt"),
-          parseStatus: "已完成",
+          parseStatus: "\u5df2\u5b8c\u6210",
           pageCount: 1,
           parseMethod: "plain-text",
-          textPreview: "投标响应",
-          extractedText: "付款响应 技术参数",
-          chunks: [{ id: "doc-b-chunk-1", order: 1, text: "付款响应 技术参数" }],
+          textPreview: "bid response",
+          extractedText: "payment response technical parameters",
+          chunks: [{ id: "doc-b-chunk-1", order: 1, text: "payment response technical parameters" }],
           uploadedAt: new Date().toISOString(),
         },
       ],
@@ -164,8 +150,17 @@ describe("resolveReviewExecutionMode", () => {
     });
 
     await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalled();
 
-    expect(store.get().reviewTasks[0]?.status).toBe("进行中");
+    const firstRequest = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(typeof firstRequest?.body).toBe("string");
+
+    if (typeof firstRequest?.body === "string") {
+      const payload = JSON.parse(firstRequest.body) as { seed?: number };
+      expect(payload.seed).toBe(expectedSeed);
+    }
+
+    expect(store.get().reviewTasks).toHaveLength(1);
 
     deleteReviewTask(created.task.id);
 

@@ -219,6 +219,7 @@ export const generateAiScenarioFindings = async (params: {
   taskId: string;
   documents: DocumentRecord[];
   regulations: Regulation[];
+  seed?: number;
   signal?: AbortSignal;
 }) => {
   const prompts =
@@ -230,6 +231,7 @@ export const generateAiScenarioFindings = async (params: {
     await requestStructuredAiReview<unknown>({
       systemPrompt: prompts.systemPrompt,
       userPrompt: prompts.userPrompt,
+      seed: params.seed,
       signal: params.signal,
     }),
   );

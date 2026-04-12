@@ -95,3 +95,19 @@ Useful commands:
 
 
 - In non-interactive environments, run: `npx drizzle-kit push --config=drizzle.config.ts --force`
+## Review Throughput Tuning
+
+For low-resource servers (for example 2C2G), review performance is controlled by the following env vars:
+
+- `OPENAI_API_KEYS`: comma-separated API keys (optional, falls back to `OPENAI_API_KEY`)
+- `AI_RETRY_MAX_ATTEMPTS`: max retries for retryable AI errors (default `4`)
+- `AI_RETRY_BASE_DELAY_MS`: exponential backoff base delay in ms (default `800`)
+- `AI_KEY_COOLDOWN_MS`: cooldown for a key after 429 in ms (default `45000`)
+- `TENDER_CHAPTER_REVIEW_CONCURRENCY`: initial chapter concurrency (default `3`)
+- `TENDER_CHAPTER_REVIEW_MIN_CONCURRENCY`: minimum chapter concurrency under pressure (default `2`)
+- `REVIEW_MIN_VISIBLE_DURATION_MS`: minimum task visible duration in ms (default `500`, set `0` to disable)
+
+Runtime behavior:
+
+- Task-level worker concurrency is fixed to `1` for 2C2G safety.
+- Chapter-level concurrency is adaptive (`3 -> 2`) under rate limit/resource pressure and recovers after a stable window.

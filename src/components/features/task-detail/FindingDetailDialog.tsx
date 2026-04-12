@@ -46,10 +46,10 @@ const FindingDetailDialog = ({
   onIgnoreFinding,
 }: FindingDetailDialogProps) => (
   <Dialog open={!!selectedIssue} onOpenChange={onOpenChange}>
-    <DialogContent className="max-w-5xl">
+    <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden p-0">
       {selectedIssue && (
-        <>
-          <DialogHeader>
+        <div className="finding-detail-scroll max-h-[90vh] overflow-y-auto overflow-x-hidden px-6 pb-6 pt-6">
+          <DialogHeader className="pr-12">
             <DialogTitle className="flex items-center gap-2">
               {renderRiskIcon(selectedIssue.risk)}
               {selectedIssue.title}
@@ -185,7 +185,7 @@ const FindingDetailDialog = ({
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
     </DialogContent>
   </Dialog>

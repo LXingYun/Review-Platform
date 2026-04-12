@@ -256,4 +256,22 @@
     background: var(--shell-tag-bg);
     color: var(--shell-tag-fg);
   }
+
+  .finding-detail-scroll {
+    scrollbar-gutter: stable;
+  }
+
+  .finding-detail-scroll::-webkit-scrollbar-button,
+  .finding-detail-scroll::-webkit-scrollbar-button:single-button,
+  .finding-detail-scroll::-webkit-scrollbar-button:single-button:vertical:decrement,
+  .finding-detail-scroll::-webkit-scrollbar-button:single-button:vertical:increment {
+    display: none;
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+
+  .finding-detail-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
