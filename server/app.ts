@@ -22,6 +22,7 @@ import {
   listTasks,
   retryReviewTask,
 } from "./services/review-service";
+import { streamReviewTaskEvents } from "./services/review-task-stream-service";
 import {
   createBidReviewSchema,
   createFindingReviewLogSchema,
@@ -31,8 +32,9 @@ import {
   updateFindingStatusSchema,
   uploadDocumentSchema,
 } from "./validators";
+import { createUploadMiddleware, UploadValidationError, uploadMaxFileSizeBytes } from "./services/upload-policy-service";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = createUploadMiddleware();
 
 export const createApp = () => {
   const app = express();
@@ -95,6 +97,20 @@ export const createApp = () => {
     res.json(getTask(req.params.taskId));
   });
 
+  app.get("/api/review-tasks/:taskId/events", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    res.write("retry: 3000\n\n");
+
+    streamReviewTaskEvents({
+      req,
+      res,
+      taskId: req.params.taskId,
+    });
+  });
+
   app.delete("/api/review-tasks/:taskId", (req, res) => {
     res.json(deleteReviewTask(req.params.taskId));
   });
@@ -113,7 +129,8 @@ export const createApp = () => {
       await createReviewTask({
         projectId: input.projectId,
         scenario: "tender_compliance",
-        documentIds: [input.tenderDocumentId, ...input.regulationIds],
+        documentIds: [input.tenderDocumentId],
+        regulationIds: input.regulationIds,
       }),
     );
   });
@@ -186,6 +203,20 @@ export const createApp = () => {
   });
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          message: `上传文件过大，单文件限制 ${(uploadMaxFileSizeBytes / 1024 / 1024).toFixed(0)}MB`,
+        });
+      }
+
+      return res.status(400).json({ message: error.message || "文件上传失败" });
+    }
+
+    if (error instanceof UploadValidationError) {
+      return res.status(400).json({ message: error.message });
+    }
+
     if (error instanceof ZodError) {
       return res.status(400).json({
         message: "请求参数校验失败",

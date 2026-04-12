@@ -24,6 +24,15 @@ const deriveProjectStatus = (projectId: string, reviewTasks: Array<{ projectId: 
   return "已完成";
 };
 
+const findLatestProjectCompletedAt = (
+  projectId: string,
+  reviewTasks: Array<{ projectId: string; status: ReviewTaskStatus; completedAt: string | null }>,
+) =>
+  reviewTasks
+    .filter((task) => task.projectId === projectId && task.status === "已完成" && Boolean(task.completedAt))
+    .map((task) => task.completedAt!)
+    .sort((a, b) => b.localeCompare(a))[0] ?? null;
+
 export const listProjects = (search?: string) => {
   const data = store.get();
   const keyword = search?.trim();
@@ -36,13 +45,15 @@ export const listProjects = (search?: string) => {
     .map((project) => {
       const taskCount = data.reviewTasks.filter((task) => task.projectId === project.id).length;
       const issueCount = data.findings.filter((finding) => finding.projectId === project.id).length;
+      const latestReviewCompletedAt = findLatestProjectCompletedAt(project.id, data.reviewTasks);
 
       return {
         ...project,
         status: deriveProjectStatus(project.id, data.reviewTasks),
         taskCount,
         issueCount,
-        date: project.createdAt.slice(0, 10),
+        date: (latestReviewCompletedAt ?? project.createdAt).slice(0, 10),
+        latestReviewCompletedAt,
       };
     });
 };

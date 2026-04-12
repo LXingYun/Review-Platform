@@ -36,6 +36,8 @@ export const getDashboardSummary = () => {
         id: task.id,
         name: task.name,
         status: task.status,
+        stage: task.stage,
+        stageLabel: task.stageLabel,
         risk: task.riskLevel,
         progress: task.progress,
       })),

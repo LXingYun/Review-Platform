@@ -28,6 +28,16 @@ const normalizeSmartQuoteDelimiters = (value: string) =>
 
 const unique = <T>(values: T[]) => Array.from(new Set(values));
 
+const resolveAiSamplingConfig = () => {
+  const seedRaw = process.env.OPENAI_SEED;
+  const parsedSeed = seedRaw ? Number(seedRaw) : NaN;
+
+  return {
+    temperature: 0,
+    ...(Number.isInteger(parsedSeed) ? { seed: parsedSeed } : {}),
+  };
+};
+
 export const parseStructuredJsonContent = <T>(content: string): T => {
   const cleaned = stripUtf8Bom(content).trim();
   const fenceStripped = stripMarkdownCodeFence(cleaned);
@@ -57,6 +67,8 @@ const requestChatCompletion = async (params: {
   userPrompt: string;
   signal?: AbortSignal;
 }) => {
+  const sampling = resolveAiSamplingConfig();
+
   const response = await fetch(`${params.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -65,7 +77,7 @@ const requestChatCompletion = async (params: {
     },
     body: JSON.stringify({
       model: params.model,
-      temperature: 0.1,
+      ...sampling,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: params.systemPrompt },

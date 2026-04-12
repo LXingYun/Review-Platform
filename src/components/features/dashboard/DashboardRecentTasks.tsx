@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { DashboardResponse } from "@/lib/api-types";
-import { getRiskBadgeVariant } from "@/lib/formatters/review";
+import { formatReviewTaskStageLabel, getRiskBadgeVariant } from "@/lib/formatters/review";
 
 interface DashboardRecentTasksProps {
   isError: boolean;
@@ -82,6 +82,8 @@ const DashboardRecentTasks = ({ isError, isLoading, recentTasks }: DashboardRece
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                     <span className={statusTone(task.status)}>{task.status}</span>
+                    <span className="text-border">/</span>
+                    <span>{task.stageLabel || formatReviewTaskStageLabel(task.stage)}</span>
                     <span className="text-border">/</span>
                     <span>AI 审查进度 {task.progress}%</span>
                   </div>

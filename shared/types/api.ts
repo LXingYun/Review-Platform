@@ -5,6 +5,7 @@ import type {
   Regulation,
   RegulationSection,
   ReviewTask,
+  ReviewTaskStage,
   ReviewTaskStatus,
   RiskLevel,
 } from "./domain";
@@ -19,6 +20,8 @@ export interface DashboardTask {
   id: string;
   name: string;
   status: ReviewTaskStatus;
+  stage: ReviewTaskStage;
+  stageLabel: string;
   risk: RiskLevel;
   progress: number;
 }
@@ -32,6 +35,7 @@ export type ProjectListItem = Project & {
   taskCount: number;
   issueCount: number;
   date: string;
+  latestReviewCompletedAt: string | null;
 };
 
 export type ProjectDetailItem = ProjectListItem;

@@ -1,9 +1,12 @@
 import { store } from "../store";
-import { AppData, Finding, ReviewScenario, ReviewTask } from "../types";
+import { AppData, Finding, ReviewScenario, ReviewTask, ReviewTaskStage } from "../types";
 import { getAiConfig } from "./ai-config-service";
 import { generateAiScenarioFindings } from "./ai-review-service";
+import { normalizeGeneratedFindings } from "./finding-normalization-service";
 import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
+import { getTaskRegulationsForExecution, resolveTaskRegulationContext } from "./review-context-service";
 import { createId, nowIso, summarizeRisk } from "../utils";
+import { getReviewTaskStageLabel } from "./review-task-stage-service";
 
 const minimumVisibleDuration = 4500;
 const workerConcurrency = Math.max(1, Number(process.env.REVIEW_WORKER_CONCURRENCY ?? 2));
@@ -71,6 +74,36 @@ const updateTaskForAttempt = (
   return updated ? { ...current, reviewTasks } : current;
 };
 
+const applyTaskStage = (
+  task: ReviewTask,
+  stage: ReviewTaskStage,
+  options: {
+    stageLabel?: string;
+    progress?: number;
+  } = {},
+): ReviewTask => ({
+  ...task,
+  stage,
+  stageLabel: options.stageLabel ?? getReviewTaskStageLabel(stage),
+  progress: options.progress ?? task.progress,
+});
+
+const toPublicTask = (task: ReviewTask): ReviewTask => ({
+  id: task.id,
+  projectId: task.projectId,
+  scenario: task.scenario,
+  name: task.name,
+  status: task.status,
+  stage: task.stage,
+  stageLabel: task.stageLabel,
+  progress: task.progress,
+  riskLevel: task.riskLevel,
+  documentIds: task.documentIds,
+  attemptCount: task.attemptCount,
+  createdAt: task.createdAt,
+  completedAt: task.completedAt,
+});
+
 const scheduleQueueDrain = () => {
   if (drainScheduled) return;
   drainScheduled = true;
@@ -100,12 +133,14 @@ const claimNextQueuedTask = () => {
       ...current,
       reviewTasks: current.reviewTasks.map((task) =>
         task.id === nextTask.id
-          ? {
-              ...task,
-              status: "进行中",
-              stageLabel: "准备审核上下文",
-              progress: 20,
-            }
+          ? applyTaskStage(
+              {
+                ...task,
+                status: "进行中",
+              },
+              "preparing_context",
+              { progress: 20 },
+            )
           : task,
       ),
     };
@@ -121,13 +156,18 @@ const markTaskFailed = (taskId: string, attemptCount: number, message: string) =
         return null;
       }
 
-      return {
-        ...task,
-        status: "失败",
-        stageLabel: message,
-        progress: 0,
-        completedAt: null,
-      };
+      return applyTaskStage(
+        {
+          ...task,
+          status: "失败",
+          completedAt: null,
+        },
+        "failed",
+        {
+          stageLabel: message,
+          progress: 0,
+        },
+      );
     }),
   );
 };
@@ -159,12 +199,14 @@ const finalizeCancelledTask = (taskId: string, attemptCount: number) => {
         return null;
       }
 
-      return {
-        ...task,
-        status: "未完成",
-        stageLabel: "任务已中止",
-        completedAt: null,
-      };
+      return applyTaskStage(
+        {
+          ...task,
+          status: "未完成",
+          completedAt: null,
+        },
+        "aborted",
+      );
     }),
   );
 };
@@ -211,13 +253,16 @@ const runReviewTaskInBackground = async (taskId: string) => {
       throw new Error("AI review requires OPENAI_API_KEY");
     }
 
+    const taskRegulations = getTaskRegulationsForExecution({
+      task,
+      availableRegulations: latest.regulations,
+    });
+
     let findings: Finding[] = [];
 
     if (task.scenario === "tender_compliance") {
       updateRunningTask(taskId, attemptCount, (currentTask) => ({
-        ...currentTask,
-        stageLabel: "进行章节级合规审查",
-        progress: 45,
+        ...applyTaskStage(currentTask, "chapter_review", { progress: 45 }),
       }));
 
       const tenderDocument = taskDocuments.find((document) => document.role === "tender");
@@ -229,22 +274,31 @@ const runReviewTaskInBackground = async (taskId: string) => {
         projectId: project.id,
         taskId,
         tenderDocument,
-        regulations: latest.regulations,
+        regulations: taskRegulations,
         signal: execution.controller.signal,
         onProgress: ({ current, total, chapterTitle, stage }) => {
           updateRunningTask(taskId, attemptCount, (currentTask) => ({
-            ...currentTask,
-            stageLabel:
-              stage === "chapter_review"
-                ? `正在审查 ${current}/${total} 个审查单元：${chapterTitle}`
-                : "正在进行跨章节一致性检查",
-            progress: stage === "chapter_review" ? 35 + Math.floor((current / total) * 35) : 78,
+            ...applyTaskStage(
+              currentTask,
+              stage === "chapter_review" ? "chapter_review" : "cross_section_review",
+              {
+                stageLabel:
+                  stage === "chapter_review"
+                    ? `正在审查 ${current}/${total} 个审查单元：${chapterTitle}`
+                    : getReviewTaskStageLabel("cross_section_review"),
+                progress: stage === "chapter_review" ? 35 + Math.floor((current / total) * 35) : 78,
+              },
+            ),
           }));
         },
       });
 
       findings = tenderResult.findings;
     } else {
+      updateRunningTask(taskId, attemptCount, (currentTask) => ({
+        ...applyTaskStage(currentTask, "ai_review", { progress: 45 }),
+      }));
+
       const tenderDocument = taskDocuments.find((document) => document.role === "tender");
       const bidDocument = taskDocuments.find((document) => document.role === "bid");
 
@@ -257,7 +311,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
         projectId: project.id,
         taskId,
         documents: taskDocuments,
-        regulations: latest.regulations,
+        regulations: taskRegulations,
         signal: execution.controller.signal,
       });
     }
@@ -266,14 +320,13 @@ const runReviewTaskInBackground = async (taskId: string) => {
       return;
     }
 
-    const riskLevel = summarizeRisk(findings.map((finding) => finding.risk));
+    const normalizedFindings = normalizeGeneratedFindings(findings);
+    const riskLevel = summarizeRisk(normalizedFindings.map((finding) => finding.risk));
     const elapsed = Date.now() - startedAt;
 
     if (elapsed < minimumVisibleDuration) {
       updateRunningTask(taskId, attemptCount, (currentTask) => ({
-        ...currentTask,
-        stageLabel: "整合审查结果",
-        progress: 80,
+        ...applyTaskStage(currentTask, "consolidating", { progress: 80 }),
       }));
 
       await new Promise((resolve) => setTimeout(resolve, minimumVisibleDuration - elapsed));
@@ -293,17 +346,19 @@ const runReviewTaskInBackground = async (taskId: string) => {
         ...current,
         reviewTasks: current.reviewTasks.map((item) =>
           item.id === taskId
-            ? {
-                ...item,
-                status: "已完成",
-                stageLabel: "审查完成",
-                progress: 100,
-                riskLevel,
-                completedAt: nowIso(),
-              }
+            ? applyTaskStage(
+                {
+                  ...item,
+                  status: "已完成",
+                  riskLevel,
+                  completedAt: nowIso(),
+                },
+                "completed",
+                { progress: 100 },
+              )
             : item,
         ),
-        findings: [...current.findings.filter((item) => item.taskId !== taskId), ...findings],
+        findings: [...current.findings.filter((item) => item.taskId !== taskId), ...normalizedFindings],
       };
     });
   } catch (error) {
@@ -318,12 +373,15 @@ const runReviewTaskInBackground = async (taskId: string) => {
           return null;
         }
 
-        return {
-          ...currentTask,
-          status: "失败",
-          stageLabel: getReviewFailureMessage(error),
-          completedAt: null,
-        };
+        return applyTaskStage(
+          {
+            ...currentTask,
+            status: "失败",
+            completedAt: null,
+          },
+          "failed",
+          { stageLabel: getReviewFailureMessage(error) },
+        );
       }),
     );
   } finally {
@@ -359,13 +417,17 @@ const recoverInterruptedTasks = () => {
     ...current,
     reviewTasks: current.reviewTasks.map((task) =>
       task.status === "进行中"
-        ? {
-            ...task,
-            status: "未完成",
-            stageLabel: "服务中断，任务未完成",
-            progress: Math.min(task.progress, 99),
-            completedAt: null,
-          }
+        ? applyTaskStage(
+            {
+              ...task,
+              status: "未完成",
+              completedAt: null,
+            },
+            "interrupted",
+            {
+              progress: Math.min(task.progress, 99),
+            },
+          )
         : task,
     ),
   }));
@@ -390,7 +452,7 @@ export const listTasks = (projectId?: string) => {
     .slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .map((task) => ({
-      ...task,
+      ...toPublicTask(task),
       projectName: data.projects.find((project) => project.id === task.projectId)?.name ?? "未知项目",
     }));
 };
@@ -404,7 +466,7 @@ export const getTask = (taskId: string) => {
   }
 
   return {
-    ...task,
+    ...toPublicTask(task),
     projectName: data.projects.find((project) => project.id === task.projectId)?.name ?? "未知项目",
   };
 };
@@ -413,6 +475,7 @@ export const createReviewTask = async (params: {
   projectId: string;
   scenario: ReviewScenario;
   documentIds: string[];
+  regulationIds?: string[];
 }) => {
   const aiConfig = getAiConfig();
   if (!aiConfig.enabled) {
@@ -433,6 +496,11 @@ export const createReviewTask = async (params: {
 
   const taskName =
     params.scenario === "tender_compliance" ? `${project.name}招标文件审查` : `${project.name}投标文件审查`;
+  const regulationContext = resolveTaskRegulationContext({
+    scenario: params.scenario,
+    availableRegulations: data.regulations,
+    requestedRegulationIds: params.regulationIds,
+  });
 
   const task: ReviewTask = {
     id: createId("task"),
@@ -440,10 +508,12 @@ export const createReviewTask = async (params: {
     scenario: params.scenario,
     name: taskName,
     status: "待审核",
-    stageLabel: "等待后台处理",
+    stage: "queued",
+    stageLabel: getReviewTaskStageLabel("queued"),
     progress: 0,
     riskLevel: "低",
     documentIds: params.documentIds,
+    ...regulationContext,
     attemptCount: 1,
     createdAt: nowIso(),
     completedAt: null,
@@ -457,7 +527,7 @@ export const createReviewTask = async (params: {
   scheduleQueueDrain();
 
   return {
-    task,
+    task: toPublicTask(task),
     findings: [],
     project,
   };
@@ -477,15 +547,17 @@ export const retryReviewTask = (taskId: string) => {
       throw new Error("当前任务正在执行，无法重试");
     }
 
-    nextTask = {
-      ...task,
-      status: "待审核",
-      stageLabel: "等待后台处理",
-      progress: 0,
-      riskLevel: "低",
-      attemptCount: task.attemptCount + 1,
-      completedAt: null,
-    };
+    nextTask = applyTaskStage(
+      {
+        ...task,
+        status: "待审核",
+        riskLevel: "低",
+        attemptCount: task.attemptCount + 1,
+        completedAt: null,
+      },
+      "queued",
+      { progress: 0 },
+    );
 
     return {
       ...current,
@@ -497,7 +569,7 @@ export const retryReviewTask = (taskId: string) => {
   scheduleQueueDrain();
 
   return {
-    task: nextTask!,
+    task: toPublicTask(nextTask!),
     findings: [],
     project: next.projects.find((project) => project.id === nextTask!.projectId),
   };
@@ -517,12 +589,14 @@ export const abortReviewTask = (taskId: string) => {
       throw new Error("当前任务不支持中止");
     }
 
-    abortedTask = {
-      ...task,
-      status: "未完成",
-      stageLabel: "任务已中止",
-      completedAt: null,
-    };
+    abortedTask = applyTaskStage(
+      {
+        ...task,
+        status: "未完成",
+        completedAt: null,
+      },
+      "aborted",
+    );
 
     return {
       ...current,
@@ -536,7 +610,7 @@ export const abortReviewTask = (taskId: string) => {
 
   return {
     success: true,
-    task: abortedTask!,
+    task: toPublicTask(abortedTask!),
   };
 };
 

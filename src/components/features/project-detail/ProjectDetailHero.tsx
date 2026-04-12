@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ProjectDetailItem } from "@/lib/api-types";
+import { formatIsoDateTime } from "@/lib/formatters/date";
 import { getProjectStatusClassName } from "@/lib/formatters/project";
 
 interface ProjectDetailHeroProps {
@@ -23,6 +24,11 @@ interface ProjectDetailHeroProps {
   onDeleteProject: () => void;
   onCreateTask: () => void;
 }
+
+const getProjectTimeBadgeText = (project: ProjectDetailItem) =>
+  project.latestReviewCompletedAt
+    ? `最近审查 ${formatIsoDateTime(project.latestReviewCompletedAt)}`
+    : `创建于 ${formatIsoDateTime(project.createdAt)}`;
 
 const ProjectDetailHero = ({
   project,
@@ -55,7 +61,7 @@ const ProjectDetailHero = ({
             {project.status}
           </Badge>
           <Badge variant="outline">{project.type}</Badge>
-          <Badge variant="outline">创建于 {project.date}</Badge>
+          <Badge variant="outline">{getProjectTimeBadgeText(project)}</Badge>
         </div>
       </div>
 

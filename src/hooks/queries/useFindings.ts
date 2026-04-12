@@ -3,6 +3,7 @@ import { apiRequest } from "@/lib/api";
 import type { FindingListItem } from "@/lib/api-types";
 import { MutationCallbacks, invalidateQueryKeys, toError } from "./mutationUtils";
 import { type FindingsSourceFilters, queryKeys } from "./queryKeys";
+import { queryRetryDelay, shouldRetryQuery } from "./retryPolicy";
 
 export interface FindingsQueryOptions {
   projectId?: string;
@@ -58,6 +59,8 @@ export const useFindingsQuery = ({
       (!scenario || Boolean(scenario)) &&
       (!taskId || Boolean(taskId)),
     refetchInterval,
+    retry: shouldRetryQuery,
+    retryDelay: queryRetryDelay,
   });
 
 export const useTaskFindingsQuery = ({

@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ProjectListItem } from "@/lib/api-types";
+import { formatIsoDateTime } from "@/lib/formatters/date";
 import { getProjectStatusClassName } from "@/lib/formatters/project";
 
 interface ProjectCardProps {
@@ -25,6 +26,11 @@ interface ProjectCardProps {
 
 const projectTypeNote = (type: ProjectListItem["type"]) =>
   type === "招标审查" ? "聚焦法规、条款与合规要求审查。" : "聚焦响应性、一致性与缺漏风险校验。";
+
+const getProjectTimeBadgeText = (project: ProjectListItem) =>
+  project.latestReviewCompletedAt
+    ? `最近审查 ${formatIsoDateTime(project.latestReviewCompletedAt)}`
+    : `创建于 ${formatIsoDateTime(project.createdAt)}`;
 
 const ProjectCard = ({ project, isDeleting, onOpenProject, onDeleteProject }: ProjectCardProps) => (
   <Card className="surface-panel overflow-hidden border-border/80 bg-card/90 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_28px_-24px_rgba(24,24,27,0.18)]">
@@ -46,7 +52,7 @@ const ProjectCard = ({ project, isDeleting, onOpenProject, onDeleteProject }: Pr
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <Badge variant="outline">{project.date}</Badge>
+        <Badge variant="outline">{getProjectTimeBadgeText(project)}</Badge>
         <Badge variant="outline">任务 {project.taskCount}</Badge>
         <Badge variant="outline">问题 {project.issueCount}</Badge>
       </div>

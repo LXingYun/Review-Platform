@@ -3,6 +3,16 @@ import { useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import type { FindingListItem } from "@/lib/api-types";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   useAbortReviewTaskMutation,
   useAddFindingReviewLogMutation,
   useDeleteReviewTaskMutation,
@@ -12,6 +22,9 @@ import {
   useTaskFindingsQuery,
   useUpdateFindingStatusMutation,
 } from "@/hooks/queries";
+import { useReviewNoteDraft } from "@/hooks/use-review-note-draft";
+import { useTaskEventStream } from "@/hooks/use-task-event-stream";
+import { useUnsavedNavigationGuard } from "@/hooks/use-unsaved-navigation-guard";
 import FindingDetailDialog from "./FindingDetailDialog";
 import TaskDetailFindingsPanel from "./TaskDetailFindingsPanel";
 import TaskDetailHeader from "./TaskDetailHeader";
@@ -28,7 +41,13 @@ const TaskDetailPageContainer = () => {
   const [humanReviewFilter, setHumanReviewFilter] = useState<"all" | "needs_review" | "no_review">("all");
   const [confidenceFilter, setConfidenceFilter] = useState<"all" | "ge_80" | "ge_60" | "lt_60">("all");
   const [reviewer, setReviewer] = useState("");
-  const [reviewNote, setReviewNote] = useState("");
+  const selectedIssueId = selectedIssue?.id ?? "";
+  const { reviewNote, setReviewNote, clearDraft, hasUnsavedDraft } = useReviewNoteDraft({
+    taskId,
+    findingId: selectedIssueId || undefined,
+  });
+  const { dialogOpen, confirmNavigation, cancelNavigation, onDialogOpenChange } =
+    useUnsavedNavigationGuard(hasUnsavedDraft);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -46,13 +65,19 @@ const TaskDetailPageContainer = () => {
     }
   }, [reviewer]);
 
-  useEffect(() => {
-    setReviewNote("");
-  }, [selectedIssue?.id]);
+  const { isConnected: isTaskStreamConnected } = useTaskEventStream({
+    taskId,
+    enabled: Boolean(taskId),
+  });
+
+  const pollingInterval = isTaskStreamConnected ? false : 3000;
 
   const { data: task, isLoading: tasksLoading } = useReviewTaskQuery(taskId, {
     enabled: Boolean(taskId),
+    refetchInterval: pollingInterval,
   });
+
+  const shouldPollFindings = Boolean(task && (task.status === "待审核" || task.status === "进行中"));
 
   const { data: documents = [], isLoading: documentsLoading } = useDocumentsQuery({
     projectId: task?.projectId,
@@ -62,7 +87,7 @@ const TaskDetailPageContainer = () => {
   const { data: findings = [], isLoading: findingsLoading } = useTaskFindingsQuery({
     taskId,
     enabled: Boolean(taskId),
-    refetchInterval: task && (task.status === "待审核" || task.status === "进行中") ? 3000 : false,
+    refetchInterval: shouldPollFindings ? pollingInterval : false,
   });
 
   useEffect(() => {
@@ -113,15 +138,17 @@ const TaskDetailPageContainer = () => {
 
   const updateFindingMutation = useUpdateFindingStatusMutation({
     onSuccess: () => {
+      if (selectedIssue) {
+        clearDraft(selectedIssue.id);
+      }
       setSelectedIssue(null);
-      setReviewNote("");
     },
   });
 
   const addReviewLogMutation = useAddFindingReviewLogMutation({
     onSuccess: (updatedFinding) => {
+      clearDraft(updatedFinding.id);
       setSelectedIssue(updatedFinding);
-      setReviewNote("");
     },
   });
 
@@ -232,6 +259,21 @@ const TaskDetailPageContainer = () => {
         onConfirmFinding={handleConfirmFinding}
         onIgnoreFinding={handleIgnoreFinding}
       />
+
+      <AlertDialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>草稿尚未保存</AlertDialogTitle>
+            <AlertDialogDescription>
+              当前复核备注草稿尚未完成提交。若继续离开页面，仍可在稍后返回该问题时恢复草稿内容。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelNavigation}>继续编辑</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmNavigation}>确认离开</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { FindingListItem } from "@/lib/api-types";
-import TaskDetailFindingRow from "./TaskDetailFindingRow";
+import TaskDetailFindingsList from "./TaskDetailFindingsList";
 import { TaskDetailRiskSummary } from "./TaskDetailOverview";
 
 interface TaskDetailFindingsPanelProps {
@@ -111,18 +111,11 @@ const TaskDetailFindingsPanel = ({
               ) : tabFiltered.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">当前筛选条件下暂无问题。</p>
               ) : (
-                <div className="overflow-hidden rounded-[24px] border border-border/80 bg-background/80">
-                  <div className="divide-y divide-border/80">
-                    {tabFiltered.map((finding) => (
-                      <TaskDetailFindingRow
-                        key={finding.id}
-                        finding={finding}
-                        onSelect={onSelectFinding}
-                        renderRiskIcon={renderRiskIcon}
-                      />
-                    ))}
-                  </div>
-                </div>
+                <TaskDetailFindingsList
+                  findings={tabFiltered}
+                  onSelectFinding={onSelectFinding}
+                  renderRiskIcon={renderRiskIcon}
+                />
               )}
             </TabsContent>
           );

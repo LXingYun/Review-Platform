@@ -6,6 +6,18 @@ export type ProjectStatus = "\u5f85\u5f00\u59cb" | "\u8fdb\u884c\u4e2d" | "\u5df
 
 export type ReviewTaskStatus = "\u5f85\u5ba1\u6838" | "\u8fdb\u884c\u4e2d" | "\u5df2\u5b8c\u6210" | "\u5931\u8d25" | "\u672a\u5b8c\u6210";
 
+export type ReviewTaskStage =
+  | "queued"
+  | "preparing_context"
+  | "ai_review"
+  | "chapter_review"
+  | "cross_section_review"
+  | "consolidating"
+  | "completed"
+  | "failed"
+  | "aborted"
+  | "interrupted";
+
 export type RiskLevel = "\u9ad8" | "\u4e2d" | "\u4f4e";
 
 export type FindingStatus = "\u5f85\u590d\u6838" | "\u5df2\u786e\u8ba4" | "\u5df2\u5ffd\u7565";
@@ -79,10 +91,13 @@ export interface ReviewTask {
   scenario: ReviewScenario;
   name: string;
   status: ReviewTaskStatus;
+  stage: ReviewTaskStage;
   stageLabel: string;
   progress: number;
   riskLevel: RiskLevel;
   documentIds: string[];
+  regulationIds?: string[];
+  regulationSnapshot?: Regulation[];
   attemptCount: number;
   createdAt: string;
   completedAt: string | null;

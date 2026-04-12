@@ -3,6 +3,7 @@ import { apiRequest } from "@/lib/api";
 import type { ReviewTaskDetailItem, ReviewTaskResult } from "@/lib/api-types";
 import { MutationCallbacks, invalidateQueryKeys, toError } from "./mutationUtils";
 import { queryKeys } from "./queryKeys";
+import { queryRetryDelay, shouldRetryQuery } from "./retryPolicy";
 
 export interface ReviewTasksQueryOptions {
   projectId?: string;
@@ -58,6 +59,8 @@ export const useReviewTasksQuery = ({
     queryFn: () => apiRequest<ReviewTaskDetailItem[]>(getReviewTasksPath(projectId)),
     enabled: enabled && (!projectId || Boolean(projectId)),
     refetchInterval,
+    retry: shouldRetryQuery,
+    retryDelay: queryRetryDelay,
   });
 
 export const useReviewTaskQuery = (
@@ -68,6 +71,8 @@ export const useReviewTaskQuery = (
     queryKey: queryKeys.reviewTasks.detail(taskId),
     queryFn: () => apiRequest<ReviewTaskDetailItem>(`/review-tasks/${taskId}`),
     enabled: enabled && Boolean(taskId),
+    retry: shouldRetryQuery,
+    retryDelay: queryRetryDelay,
     refetchInterval: (query) => {
       if (refetchInterval !== undefined) {
         return refetchInterval;

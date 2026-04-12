@@ -3,6 +3,11 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { AppData } from "./types";
 import { seedData } from "./seed";
+import { getReviewTaskStageLabel, inferReviewTaskStage } from "./services/review-task-stage-service";
+import {
+  enqueueRelationalMirrorSync,
+  initializeRelationalMirror,
+} from "./services/relational-mirror-service";
 
 const dataDir = path.resolve(process.cwd(), "server-data");
 const databaseFile = path.join(dataDir, "app-data.sqlite");
@@ -13,6 +18,7 @@ const collections = ["projects", "documents", "reviewTasks", "findings", "regula
 type CollectionName = (typeof collections)[number];
 
 let database: DatabaseSync | null = null;
+let relationalMirrorInitialized = false;
 
 const stripUtf8Bom = (value: string) => value.replace(/^\uFEFF/, "");
 
@@ -42,10 +48,16 @@ const normalizeSnapshot = (data: AppData): AppData => ({
       sectionTitle: chunk.sectionTitle,
     })),
   })),
-  reviewTasks: data.reviewTasks.map((task) => ({
-    ...task,
-    attemptCount: task.attemptCount ?? 1,
-  })),
+  reviewTasks: data.reviewTasks.map((task) => {
+    const normalizedStage = task.stage ?? inferReviewTaskStage(task);
+
+    return {
+      ...task,
+      stage: normalizedStage,
+      stageLabel: task.stageLabel || getReviewTaskStageLabel(normalizedStage),
+      attemptCount: task.attemptCount ?? 1,
+    };
+  }),
   findings: data.findings.map((finding) => ({
     ...finding,
     sourceChunkIds: finding.sourceChunkIds ?? [],
@@ -77,6 +89,11 @@ const getDatabase = () => {
   });
 
   bootstrapDatabase(database);
+
+  if (!relationalMirrorInitialized) {
+    initializeRelationalMirror(loadSnapshot(database));
+    relationalMirrorInitialized = true;
+  }
 
   return database;
 };
@@ -178,6 +195,7 @@ export const store = {
       const next = normalizeSnapshot(updater(current));
       persistSnapshot(db, current, next);
       db.exec("COMMIT;");
+      enqueueRelationalMirrorSync(next);
       return next;
     } catch (error) {
       db.exec("ROLLBACK;");

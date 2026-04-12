@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { ReviewTaskDetailItem } from "@/lib/api-types";
-import { getRiskBadgeVariant } from "@/lib/formatters/review";
+import { formatIsoDateTime } from "@/lib/formatters/date";
+import { formatReviewTaskStageLabel, getRiskBadgeVariant } from "@/lib/formatters/review";
 
 interface TaskDetailOverviewProps {
   task: ReviewTaskDetailItem;
@@ -23,9 +24,9 @@ const TaskDetailOverview = ({ task, relatedDocumentsCount, findingsCount }: Task
         </div>
         <div className="space-y-2 text-sm text-muted-foreground">
           <p>任务状态：{task.status}</p>
-          <p>当前阶段：{task.stageLabel}</p>
-          <p>创建时间：{task.createdAt.slice(0, 10)}</p>
-          <p>完成时间：{task.completedAt ? task.completedAt.slice(0, 10) : "未完成"}</p>
+          <p>当前阶段：{task.stageLabel || formatReviewTaskStageLabel(task.stage)}</p>
+          <p>创建时间：{formatIsoDateTime(task.createdAt)}</p>
+          <p>完成时间：{task.completedAt ? formatIsoDateTime(task.completedAt) : "未完成"}</p>
           <p>进度：{task.progress}%</p>
         </div>
         <div className="pt-2">

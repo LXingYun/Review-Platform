@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ReviewTaskItem } from "@/lib/api-types";
+import { formatIsoDateTime } from "@/lib/formatters/date";
 import { getRiskBadgeVariant } from "@/lib/formatters/review";
 
 interface ProjectTasksCardProps {
@@ -54,7 +55,8 @@ const ProjectTasksCard = ({
               <div>
                 <p className="text-base font-semibold text-foreground">{task.name}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {task.scenario === "tender_compliance" ? "招标审查" : "投标审查"} · {task.createdAt.slice(0, 10)}
+                  {task.scenario === "tender_compliance" ? "招标审查" : "投标审查"} ·{" "}
+                  {task.completedAt ? `完成于 ${formatIsoDateTime(task.completedAt)}` : `创建于 ${formatIsoDateTime(task.createdAt)}`}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">当前阶段：{task.stageLabel}</p>
               </div>
