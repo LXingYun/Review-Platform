@@ -1,6 +1,6 @@
 import { store } from "../store";
 import { AppData, Finding, ReviewScenario, ReviewTask, ReviewTaskStage } from "../types";
-import { getAiConfig } from "./ai-config-service";
+import { getAiConfig, getReviewWorkerConcurrency } from "./ai-config-service";
 import { generateAiScenarioFindings } from "./ai-review-service";
 import { normalizeGeneratedFindings } from "./finding-normalization-service";
 import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
@@ -9,7 +9,7 @@ import { createId, nowIso, summarizeRisk } from "../utils";
 import { getReviewTaskStageLabel } from "./review-task-stage-service";
 import { toDeterministicSeed } from "./review-seed-service";
 
-const workerConcurrency = 1;
+const workerConcurrency = getReviewWorkerConcurrency();
 
 interface RunningTaskExecution {
   attemptCount: number;
@@ -25,9 +25,6 @@ let drainScheduled = false;
 export const resolveReviewExecutionMode = (params: {
   aiEnabled: boolean;
 }) => (params.aiEnabled ? "ai" : "blocked");
-
-const isAbortError = (error: unknown) =>
-  error instanceof Error && (error.name === "AbortError" || error.message.includes("aborted"));
 
 const getReviewFailureMessage = (error: unknown) => {
   if (!(error instanceof Error)) {
@@ -370,7 +367,7 @@ const runReviewTaskInBackground = async (taskId: string) => {
       };
     });
   } catch (error) {
-    if (isTaskCancelled(taskId, attemptCount) || isAbortError(error)) {
+    if (isTaskCancelled(taskId, attemptCount)) {
       finalizeCancelledTask(taskId, attemptCount);
       return;
     }

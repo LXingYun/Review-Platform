@@ -95,6 +95,12 @@ export const getAiConfig = () => {
       min: 1_000,
       max: 10 * 60_000,
     }),
+    requestTimeoutMs: parseDurationMs({
+      value: process.env.AI_REQUEST_TIMEOUT_MS,
+      fallback: 90_000,
+      min: 1_000,
+      max: 10 * 60_000,
+    }),
     chapterReviewConcurrency,
     chapterReviewMinConcurrency,
     reviewMinVisibleDurationMs: parseDurationMs({
@@ -105,3 +111,13 @@ export const getAiConfig = () => {
     }),
   };
 };
+
+export const getReviewWorkerConcurrency = () =>
+  Math.floor(
+    parseNumber({
+      value: process.env.REVIEW_WORKER_CONCURRENCY,
+      fallback: 1,
+      min: 1,
+      max: 8,
+    }),
+  );

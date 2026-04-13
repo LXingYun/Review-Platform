@@ -117,4 +117,31 @@ describe("review-chapter-concurrency-service", () => {
 
     await expect(runPromise).rejects.toThrow("aborted");
   });
+
+  it("returns the original worker error instead of abort when a chapter fails", async () => {
+    const controller = createReviewChapterConcurrencyController({
+      initialConcurrency: 2,
+      minConcurrency: 1,
+      getRuntimeMetrics: () => ({
+        rssBytes: 0,
+        eventLoopLagMs: 0,
+      }),
+    });
+
+    const runPromise = runWithAdaptiveChapterConcurrency({
+      items: [1, 2],
+      controller,
+      worker: async ({ item }) => {
+        if (item === 1) {
+          await sleep(5);
+          throw new Error("chapter-1-failed");
+        }
+
+        await sleep(50);
+        return item;
+      },
+    });
+
+    await expect(runPromise).rejects.toThrow("chapter-1-failed");
+  });
 });

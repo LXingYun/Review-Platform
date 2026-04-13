@@ -46,6 +46,57 @@ const resolveAiSamplingConfig = (seed?: number) => {
   };
 };
 
+const createRequestSignalWithTimeout = (params: {
+  signal?: AbortSignal;
+  timeoutMs: number;
+}) => {
+  if (params.timeoutMs <= 0) {
+    return {
+      signal: params.signal,
+      didTimeout: () => false,
+      dispose: () => {},
+    };
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const onAbort = (event: Event) => {
+    const signal = event.target as AbortSignal;
+    if (!controller.signal.aborted) {
+      controller.abort(signal.reason);
+    }
+  };
+
+  if (params.signal?.aborted) {
+    controller.abort(params.signal.reason);
+  } else {
+    params.signal?.addEventListener("abort", onAbort, { once: true });
+  }
+
+  timer = setTimeout(() => {
+    timedOut = true;
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+  }, params.timeoutMs);
+
+  const dispose = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    params.signal?.removeEventListener("abort", onAbort);
+  };
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    dispose,
+  };
+};
+
 export const parseStructuredJsonContent = <T>(content: string): T => {
   const cleaned = stripUtf8Bom(content).trim();
   const fenceStripped = stripMarkdownCodeFence(cleaned);
@@ -74,6 +125,7 @@ const requestChatCompletion = async (params: {
   retryMaxAttempts: number;
   retryBaseDelayMs: number;
   keyCooldownMs: number;
+  requestTimeoutMs: number;
   systemPrompt: string;
   userPrompt: string;
   seed?: number;
@@ -92,6 +144,10 @@ const requestChatCompletion = async (params: {
     onRetry: params.onRetry,
     operation: async () => {
       const lease = keyPool.acquire();
+      const requestSignal = createRequestSignalWithTimeout({
+        signal: params.signal,
+        timeoutMs: params.requestTimeoutMs,
+      });
 
       try {
         const response = await fetch(`${params.baseUrl}/chat/completions`, {
@@ -109,7 +165,7 @@ const requestChatCompletion = async (params: {
               { role: "user", content: params.userPrompt },
             ],
           }),
-          signal: params.signal,
+          signal: requestSignal.signal,
         });
 
         if (!response.ok) {
@@ -140,6 +196,13 @@ const requestChatCompletion = async (params: {
         keyPool.reportSuccess({ keyId: lease.keyId });
         return content;
       } catch (error) {
+        if (requestSignal.didTimeout()) {
+          throw createAiRequestError({
+            message: `AI request timed out after ${params.requestTimeoutMs}ms`,
+            retryable: true,
+          });
+        }
+
         if (isRateLimitedAiError(error)) {
           keyPool.reportRateLimited({
             keyId: lease.keyId,
@@ -147,6 +210,8 @@ const requestChatCompletion = async (params: {
           });
         }
         throw error;
+      } finally {
+        requestSignal.dispose();
       }
     },
   });
@@ -159,6 +224,7 @@ const repairStructuredJson = async <T>(params: {
   retryMaxAttempts: number;
   retryBaseDelayMs: number;
   keyCooldownMs: number;
+  requestTimeoutMs: number;
   rawContent: string;
   seed?: number;
   signal?: AbortSignal;
@@ -171,6 +237,7 @@ const repairStructuredJson = async <T>(params: {
     retryMaxAttempts: params.retryMaxAttempts,
     retryBaseDelayMs: params.retryBaseDelayMs,
     keyCooldownMs: params.keyCooldownMs,
+    requestTimeoutMs: params.requestTimeoutMs,
     systemPrompt: [
       "You are a JSON repair assistant.",
       "Repair the user input into valid JSON.",
@@ -205,6 +272,7 @@ export const requestStructuredAiReview = async <T>(params: {
     retryMaxAttempts: config.retryMaxAttempts,
     retryBaseDelayMs: config.retryBaseDelayMs,
     keyCooldownMs: config.keyCooldownMs,
+    requestTimeoutMs: config.requestTimeoutMs,
     systemPrompt: params.systemPrompt,
     userPrompt: params.userPrompt,
     seed: params.seed,
@@ -223,6 +291,7 @@ export const requestStructuredAiReview = async <T>(params: {
         retryMaxAttempts: config.retryMaxAttempts,
         retryBaseDelayMs: config.retryBaseDelayMs,
         keyCooldownMs: config.keyCooldownMs,
+        requestTimeoutMs: config.requestTimeoutMs,
         rawContent: content,
         seed: params.seed,
         signal: params.signal,

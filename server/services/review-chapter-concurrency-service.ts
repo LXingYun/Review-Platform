@@ -226,9 +226,10 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
     return [];
   }
 
+  const externalSignal = params.signal;
   const internalAbortController = new AbortController();
   const signal = createCombinedAbortSignal(
-    [params.signal, internalAbortController.signal].filter((item): item is AbortSignal => Boolean(item)),
+    [externalSignal, internalAbortController.signal].filter((item): item is AbortSignal => Boolean(item)),
   );
 
   return await new Promise<TResult[]>((resolve, reject) => {
@@ -254,15 +255,15 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
     const pumpQueue = () => {
       if (settled) return;
 
-      if (signal?.aborted) {
-        settleWithError(toAbortError());
-        return;
-      }
-
       if (firstError) {
         if (activeCount === 0) {
           settleWithError(firstError);
         }
+        return;
+      }
+
+      if (externalSignal?.aborted) {
+        settleWithError(toAbortError());
         return;
       }
 
@@ -320,7 +321,7 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
       }
     };
 
-    signal?.addEventListener(
+    externalSignal?.addEventListener(
       "abort",
       () => {
         if (!settled) {
