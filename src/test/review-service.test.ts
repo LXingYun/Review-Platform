@@ -270,7 +270,7 @@ describe("resolveReviewExecutionMode", () => {
       documentIds: ["doc-t", "doc-b"],
     });
 
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
     await Promise.resolve();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);

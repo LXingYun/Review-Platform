@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ToastAction } from "@/components/ui/toast";
 import {
   useCreateBidReviewMutation,
   useCreateTenderReviewMutation,
@@ -12,10 +13,17 @@ import {
   useUploadDocumentMutation,
 } from "@/hooks/queries";
 import { useToast } from "@/hooks/use-toast";
-import type { ProjectListItem } from "@/lib/api-types";
+import { ApiRequestError, apiRequest } from "@/lib/api";
+import type { ProjectListItem, ReviewScenario, ReviewTaskDetailItem } from "@/lib/api-types";
 import UploadDropZoneSection from "./UploadDropZoneSection";
 import UploadLead from "./UploadLead";
 import UploadProjectSelector from "./UploadProjectSelector";
+import {
+  TASK_CREATION_RECOVERY_INTERVAL_MS,
+  TASK_CREATION_RECOVERY_MAX_ATTEMPTS,
+  findRecoveredTask,
+  waitFor,
+} from "./taskCreationRecovery";
 import type { ReviewType, UploadRole, UploadStep } from "./types";
 
 const reviewTypeFromProjectType = (projectType: ProjectListItem["type"]): ReviewType => {
@@ -30,14 +38,16 @@ const UploadPageContainer = () => {
   const { toast } = useToast();
   const tenderInputRef = useRef<HTMLInputElement | null>(null);
   const bidInputRef = useRef<HTMLInputElement | null>(null);
+  const lastTenderCreateRequestAtRef = useRef(0);
+  const lastBidCreateRequestAtRef = useRef(0);
 
   const [reviewType, setReviewType] = useState<ReviewType>(null);
   const [step, setStep] = useState<UploadStep>("select");
   const [dragActive, setDragActive] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [isRecoveringTaskCreation, setIsRecoveringTaskCreation] = useState(false);
 
   const presetProjectId = searchParams.get("projectId") ?? "";
-
   const { data: projects = [] } = useProjectsQuery();
 
   useEffect(() => {
@@ -54,11 +64,65 @@ const UploadPageContainer = () => {
     enabled: Boolean(selectedProjectId),
   });
 
+  const openProjectTaskList = useCallback(
+    (projectId: string) => {
+      navigate(`/projects/${encodeURIComponent(projectId)}`);
+    },
+    [navigate],
+  );
+
+  const recoverTaskAfterTimeout = useCallback(
+    async (params: {
+      projectId: string;
+      scenario: ReviewScenario;
+      requestStartedAtMs: number;
+    }) => {
+      setIsRecoveringTaskCreation(true);
+
+      try {
+        for (let attempt = 0; attempt < TASK_CREATION_RECOVERY_MAX_ATTEMPTS; attempt += 1) {
+          if (attempt > 0) {
+            await waitFor(TASK_CREATION_RECOVERY_INTERVAL_MS);
+          }
+
+          const tasks = await apiRequest<ReviewTaskDetailItem[]>(
+            `/review-tasks?projectId=${encodeURIComponent(params.projectId)}`,
+          );
+
+          const recoveredTask = findRecoveredTask({
+            tasks,
+            projectId: params.projectId,
+            scenario: params.scenario,
+            requestStartedAtMs: params.requestStartedAtMs,
+          });
+
+          if (!recoveredTask) {
+            continue;
+          }
+
+          toast({
+            title: "任务已创建",
+            description: "创建请求超时，但任务已经成功创建。",
+          });
+          navigate(`/tasks/${recoveredTask.id}`);
+          return true;
+        }
+
+        return false;
+      } catch {
+        return false;
+      } finally {
+        setIsRecoveringTaskCreation(false);
+      }
+    },
+    [navigate, toast],
+  );
+
   const uploadMutation = useUploadDocumentMutation({
     onSuccess: (_, variables) => {
       toast({
         title: "上传成功",
-        description: `${variables.file.name} 已完成上传并进入可审查状态。`,
+        description: `${variables.file.name} 已完成上传。`,
       });
     },
     onError: (error) => {
@@ -78,7 +142,31 @@ const UploadPageContainer = () => {
       });
       navigate(`/tasks/${result.task.id}`);
     },
-    onError: (error) => {
+    onError: async (error, variables) => {
+      if (error instanceof ApiRequestError && error.isTimeout) {
+        const recovered = await recoverTaskAfterTimeout({
+          projectId: variables.projectId,
+          scenario: "tender_compliance",
+          requestStartedAtMs: lastTenderCreateRequestAtRef.current || Date.now(),
+        });
+
+        if (recovered) {
+          return;
+        }
+
+        toast({
+          title: "创建任务超时",
+          description: "任务可能已创建，请前往项目页确认。",
+          variant: "destructive",
+          action: (
+            <ToastAction altText="查看项目详情" onClick={() => openProjectTaskList(variables.projectId)}>
+              查看项目
+            </ToastAction>
+          ),
+        });
+        return;
+      }
+
       toast({
         title: "创建审查失败",
         description: error.message,
@@ -95,7 +183,31 @@ const UploadPageContainer = () => {
       });
       navigate(`/tasks/${result.task.id}`);
     },
-    onError: (error) => {
+    onError: async (error, variables) => {
+      if (error instanceof ApiRequestError && error.isTimeout) {
+        const recovered = await recoverTaskAfterTimeout({
+          projectId: variables.projectId,
+          scenario: "bid_consistency",
+          requestStartedAtMs: lastBidCreateRequestAtRef.current || Date.now(),
+        });
+
+        if (recovered) {
+          return;
+        }
+
+        toast({
+          title: "创建任务超时",
+          description: "任务可能已创建，请前往项目页确认。",
+          variant: "destructive",
+          action: (
+            <ToastAction altText="查看项目详情" onClick={() => openProjectTaskList(variables.projectId)}>
+              查看项目
+            </ToastAction>
+          ),
+        });
+        return;
+      }
+
       toast({
         title: "创建审查失败",
         description: error.message,
@@ -142,6 +254,8 @@ const UploadPageContainer = () => {
   const bidFiles = useMemo(() => documents.filter((document) => document.role === "bid"), [documents]);
   const latestTender = tenderFiles[0];
   const latestBid = bidFiles[0];
+  const isTenderCreateBusy = tenderReviewMutation.isPending || isRecoveringTaskCreation;
+  const isBidCreateBusy = bidReviewMutation.isPending || isRecoveringTaskCreation;
 
   const handleFileUpload = (files: FileList | null, role: UploadRole) => {
     if (!files?.length || !selectedProjectId) return;
@@ -174,7 +288,7 @@ const UploadPageContainer = () => {
         <UploadLead
           eyebrow="审查入口"
           title="请先选择对应项目，再发起文件审查"
-          description="系统将根据您选择的“项目类型”，自动匹配并进入【招标审查】或【投标审查】流程。"
+          description="系统会根据项目类型自动切换到对应审查流程。"
         />
         {renderProjectSelector()}
       </div>
@@ -187,7 +301,7 @@ const UploadPageContainer = () => {
         <UploadLead
           eyebrow="招标审查"
           title="上传需要审查的招标文件"
-          description="文件会先完成解析，再进入招标文件合规审查与章节级风险检查。"
+          description="文件会先完成解析，再进入招标文件合规审查。"
         />
 
         {renderProjectSelector()}
@@ -209,16 +323,20 @@ const UploadPageContainer = () => {
         <div className="flex justify-end">
           <Button
             className="rounded-full px-6"
-            disabled={!latestTender || tenderReviewMutation.isPending}
-            onClick={() =>
-              latestTender &&
+            disabled={!latestTender || isTenderCreateBusy}
+            onClick={() => {
+              if (!latestTender || isTenderCreateBusy) {
+                return;
+              }
+
+              lastTenderCreateRequestAtRef.current = Date.now();
               tenderReviewMutation.mutate({
                 projectId: selectedProjectId,
                 tenderDocumentId: latestTender.id,
-              })
-            }
+              });
+            }}
           >
-            {tenderReviewMutation.isPending ? "创建审查中..." : "开始审查"}
+            {isTenderCreateBusy ? "创建审查中..." : "开始审查"}
           </Button>
         </div>
       </div>
@@ -231,7 +349,7 @@ const UploadPageContainer = () => {
         <UploadLead
           eyebrow="投标审查"
           title="先上传招标文件，作为投标审查的参照底稿"
-          description="投标文件不会单独判断，它必须和招标要求放在同一轮审查上下文里。"
+          description="投标审查需要同时包含招标文件和投标文件。"
           stepBadge="步骤 1 / 2"
         />
 
@@ -258,7 +376,7 @@ const UploadPageContainer = () => {
           <Card className="surface-panel flex h-full flex-col bg-card/85">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">当前流程</CardTitle>
-              <CardDescription>流程说明收紧为侧栏提示，不再单独占据首屏。</CardDescription>
+              <CardDescription>完成招标文件上传后再进入投标文件上传。</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-1 flex-col gap-3">
               <div className="rounded-[18px] border border-primary/20 bg-primary px-4 py-3 text-sm text-primary-foreground">
@@ -268,7 +386,11 @@ const UploadPageContainer = () => {
                 02 上传投标文件
               </div>
               <div className="mt-auto pt-3">
-                <Button className="w-full rounded-full" disabled={!latestTender} onClick={() => setStep("upload-tender-tender")}>
+                <Button
+                  className="w-full rounded-full"
+                  disabled={!latestTender}
+                  onClick={() => setStep("upload-tender-tender")}
+                >
                   下一步
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
@@ -284,8 +406,8 @@ const UploadPageContainer = () => {
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
       <UploadLead
         eyebrow="投标审查"
-        title="现在上传投标文件，形成完整的比对语境"
-        description="招标要求已经归档完成，接下来这份投标文件会与其进行响应性和一致性审查。"
+        title="现在上传投标文件，形成完整比对语境"
+        description="投标文件会与招标要求进行响应性和一致性审查。"
         stepBadge="步骤 2 / 2"
       />
 
@@ -312,7 +434,7 @@ const UploadPageContainer = () => {
         <Card className="surface-panel flex h-full flex-col bg-card/85">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">流程摘要</CardTitle>
-            <CardDescription>你已经完成审查前的上下文准备。</CardDescription>
+            <CardDescription>已完成审查前的上下文准备，可以发起任务。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-3">
             <div className="rounded-[18px] border border-success/20 bg-success/5 px-4 py-3">
@@ -325,18 +447,21 @@ const UploadPageContainer = () => {
             <div className="mt-auto pt-3">
               <Button
                 className="w-full rounded-full"
-                disabled={!latestTender || !latestBid || bidReviewMutation.isPending}
-                onClick={() =>
-                  latestTender &&
-                  latestBid &&
+                disabled={!latestTender || !latestBid || isBidCreateBusy}
+                onClick={() => {
+                  if (!latestTender || !latestBid || isBidCreateBusy) {
+                    return;
+                  }
+
+                  lastBidCreateRequestAtRef.current = Date.now();
                   bidReviewMutation.mutate({
                     projectId: selectedProjectId,
                     tenderDocumentId: latestTender.id,
                     bidDocumentId: latestBid.id,
-                  })
-                }
+                  });
+                }}
               >
-                {bidReviewMutation.isPending ? "创建审查中..." : "开始审查"}
+                {isBidCreateBusy ? "创建审查中..." : "开始审查"}
               </Button>
             </div>
           </CardContent>

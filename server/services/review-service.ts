@@ -22,6 +22,15 @@ let reviewWorkersStarted = false;
 let activeWorkers = 0;
 let drainScheduled = false;
 
+const scheduleMacrotask = (runner: () => void) => {
+  if (typeof setImmediate === "function") {
+    setImmediate(runner);
+    return;
+  }
+
+  setTimeout(runner, 0);
+};
+
 export const resolveReviewExecutionMode = (params: {
   aiEnabled: boolean;
 }) => (params.aiEnabled ? "ai" : "blocked");
@@ -105,7 +114,7 @@ const scheduleQueueDrain = () => {
   if (drainScheduled) return;
   drainScheduled = true;
 
-  queueMicrotask(() => {
+  scheduleMacrotask(() => {
     drainScheduled = false;
     void drainQueue();
   });
