@@ -9,6 +9,20 @@ const supportedImageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, " ").trim();
 
+const collapseHanCharacterInnerSpaces = (value: string) => {
+  let normalized = value;
+
+  while (true) {
+    const next = normalized.replace(/([\u3400-\u9FFF])\s+([\u3400-\u9FFF])/g, "$1$2");
+    if (next === normalized) {
+      return normalized;
+    }
+    normalized = next;
+  }
+};
+
+const normalizeExtractedText = (value: string) => collapseHanCharacterInnerSpaces(normalizeWhitespace(value));
+
 const previewText = (value: string, maxLength = 160) => {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength)}...`;
@@ -68,7 +82,7 @@ const splitPdfByPageLimit = async (fileBuffer: Buffer, maxPages: number) => {
 
 const parsePdf = async (fileBuffer: Buffer, chunkIdPrefix: string) => {
   const result = await pdf(fileBuffer);
-  const nativeText = normalizeWhitespace(result.text ?? "");
+  const nativeText = normalizeExtractedText(result.text ?? "");
   const pageCount = result.numpages || 1;
 
   if (nativeText.length >= 80) {
@@ -94,7 +108,7 @@ const parsePdf = async (fileBuffer: Buffer, chunkIdPrefix: string) => {
       }
     }
 
-    const extractedText = normalizeWhitespace(ocrTexts.join("\n"));
+    const extractedText = normalizeExtractedText(ocrTexts.join("\n"));
     if (extractedText) {
       return withChunks(
         {
@@ -143,7 +157,7 @@ const parsePdf = async (fileBuffer: Buffer, chunkIdPrefix: string) => {
 };
 
 const parseTextLikeFile = (fileBuffer: Buffer, chunkIdPrefix: string) => {
-  const extractedText = normalizeWhitespace(fileBuffer.toString("utf8"));
+  const extractedText = normalizeExtractedText(fileBuffer.toString("utf8"));
 
   return withChunks(
     {

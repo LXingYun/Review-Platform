@@ -17,6 +17,19 @@ interface TenderChapter {
   pageRange: string;
 }
 
+interface TenderChapterDraft {
+  startIndex: number;
+  title: string;
+  chunks: DocumentChunk[];
+}
+
+type ChapterHeadingLevel = "strong" | "weak";
+
+interface ChapterHeadingMatch {
+  level: ChapterHeadingLevel;
+  title: string;
+}
+
 const tenderCategoryEnum = z.enum([
   "\u8d44\u683c\u6761\u4ef6",
   "\u8bc4\u6807\u529e\u6cd5",
@@ -65,11 +78,54 @@ const crossScanSchema = z.object({
   summary: z.string().default(""),
 });
 
-const chapterTitlePatterns = [
-  /^\s*\u7b2c[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\u5343\d]+[\u7ae0\u8282][^\n]{0,50}/,
-  /^\s*\d+\.(?!\d)\s*[^\n]{0,60}/,
-  /^\s*[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+[\u3001\.\uff0e]\s*[^\n]{0,60}/,
-];
+const fallbackChapterTitlePrefix = "\u6587\u6863\u7247\u6bb5\u7ec4 ";
+const chapterReviewSystemPrompt = [
+  "You are a tender chapter review assistant.",
+  "Detect compliance risks based only on the input chapter and regulation candidates.",
+  "Use chapter chunks as the only source text context.",
+  "If evidence is insufficient, return an empty findings array.",
+  "Return valid JSON only.",
+].join("\n");
+
+const chapterReviewOutputContract = {
+  chapter_title: "string",
+  summary: "string",
+  findings: [
+    {
+      title: "string",
+      category:
+        "\u8d44\u683c\u6761\u4ef6|\u8bc4\u6807\u529e\u6cd5|\u4fdd\u8bc1\u91d1\u6761\u6b3e|\u5546\u52a1\u6761\u6b3e|\u6280\u672f\u6761\u6b3e|\u65f6\u95f4\u8282\u70b9|\u6587\u4ef6\u5b8c\u6574\u6027|\u5176\u4ed6",
+      risk: "\u9ad8|\u4e2d|\u4f4e",
+      description: "string",
+      recommendation: "string",
+      references: ["string"],
+      sourceChunkIds: ["string"],
+      regulationChunkIds: ["string"],
+      needsHumanReview: true,
+      confidence: 0,
+    },
+  ],
+} as const;
+
+interface ChapterTokenBudgetConfig {
+  targetMinTokens: number;
+  targetMaxTokens: number;
+  targetMidTokens: number;
+  hardMaxTokens: number;
+  tailMinTokens: number;
+}
+
+const defaultChapterTokenBudgetConfig: ChapterTokenBudgetConfig = {
+  targetMinTokens: 8_000,
+  targetMaxTokens: 12_000,
+  targetMidTokens: 10_000,
+  hardMaxTokens: 18_000,
+  tailMinTokens: 6_000,
+};
+
+const strongChapterTitlePattern =
+  /^\s*\u7b2c[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\u5343\d]+[\u7ae0\u8282][^\n]{0,50}/;
+const weakChapterTitlePattern = /^\s*\d+\.(?!\d)\s*[^\n]{0,60}/;
 
 const normalizeTitle = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -88,54 +144,117 @@ const isTocNoise = (text: string) => {
   return false;
 };
 
-const extractChapterTitle = (text: string) => {
+const extractChapterHeading = (text: string): ChapterHeadingMatch | null => {
   const sanitized = stripLeadingPageNumber(text);
 
-  for (const pattern of chapterTitlePatterns) {
-    const match = sanitized.match(pattern);
-    if (!match?.[0]) continue;
-
-    const normalized = normalizeTitle(match[0]);
+  const strongMatch = sanitized.match(strongChapterTitlePattern);
+  if (strongMatch?.[0]) {
+    const normalized = normalizeTitle(strongMatch[0]);
     if (!isTocNoise(normalized)) {
-      return normalized;
+      return {
+        level: "strong",
+        title: normalized,
+      };
+    }
+  }
+
+  const weakMatch = sanitized.match(weakChapterTitlePattern);
+  if (weakMatch?.[0]) {
+    const normalized = normalizeTitle(weakMatch[0]);
+    if (!isTocNoise(normalized)) {
+      return {
+        level: "weak",
+        title: normalized,
+      };
     }
   }
 
   return null;
 };
 
+const isFallbackChapterTitle = (title: string) => title.startsWith(fallbackChapterTitlePrefix);
+
+const resolveMergedChapterTitle = (leftTitle: string, rightTitle: string) => {
+  if (!isFallbackChapterTitle(leftTitle)) return leftTitle;
+  if (!isFallbackChapterTitle(rightTitle)) return rightTitle;
+  return leftTitle;
+};
+
+const estimatePageByChunkOrder = (document: DocumentRecord, chunkOrder: number) => {
+  const totalChunks = Math.max(document.chunks.length, 1);
+  return Math.max(1, Math.ceil((chunkOrder / totalChunks) * document.pageCount));
+};
+
+const buildPageRangeFromChunks = (document: DocumentRecord, chunks: DocumentChunk[]) => {
+  const firstChunk = chunks[0];
+  const lastChunk = chunks[chunks.length - 1];
+  const startPage = estimatePageByChunkOrder(document, firstChunk.order);
+  const endPage = estimatePageByChunkOrder(document, lastChunk.order);
+  return startPage === endPage ? `\u7b2c ${startPage} \u9875` : `\u7b2c ${startPage}-${endPage} \u9875`;
+};
+
+const createTenderChapterFromChunks = (params: {
+  document: DocumentRecord;
+  title: string;
+  chunks: DocumentChunk[];
+}): TenderChapter => ({
+  id: `${params.document.id}-chapter-${params.chunks[0].order}`,
+  title: params.title,
+  text: params.chunks.map((chunk) => chunk.text).join("\n"),
+  chunks: params.chunks,
+  pageRange: buildPageRangeFromChunks(params.document, params.chunks),
+});
+
+const estimatePromptTokensProxy = (value: string) => value.replace(/\s+/g, "").length;
+
+const mergeAdjacentChapterDrafts = (
+  left: TenderChapterDraft,
+  right: TenderChapterDraft,
+): TenderChapterDraft => ({
+  startIndex: left.startIndex,
+  title: resolveMergedChapterTitle(left.title, right.title),
+  chunks: [...left.chunks, ...right.chunks],
+});
+
+const mergeDraftsAt = (drafts: TenderChapterDraft[], index: number) => {
+  drafts[index] = mergeAdjacentChapterDrafts(drafts[index], drafts[index + 1]);
+  drafts.splice(index + 1, 1);
+};
+
 export const extractTenderChapters = (document: DocumentRecord): TenderChapter[] => {
   if (document.chunks.length === 0) return [];
 
-  const totalChunks = Math.max(document.chunks.length, 1);
-  const estimatePage = (chunkOrder: number) => Math.max(1, Math.ceil((chunkOrder / totalChunks) * document.pageCount));
-
-  const chapters: TenderChapter[] = [];
-  let current: TenderChapter | null = null;
+  const chapterDrafts: TenderChapterDraft[] = [];
+  let current: TenderChapterDraft | null = null;
 
   document.chunks.forEach((chunk, index) => {
-    const title = extractChapterTitle(chunk.text);
+    const heading = extractChapterHeading(chunk.text);
 
-    if (!current || title) {
-      if (current) chapters.push(current);
+    if (!current || heading) {
+      if (current) chapterDrafts.push(current);
 
       current = {
-        id: `${document.id}-chapter-${index + 1}`,
-        title: title ?? `\u6587\u6863\u7247\u6bb5\u7ec4 ${chapters.length + 1}`,
-        text: chunk.text,
+        startIndex: index,
+        title: heading?.title ?? `${fallbackChapterTitlePrefix}${chapterDrafts.length + 1}`,
         chunks: [chunk],
-        pageRange: `\u7b2c ${estimatePage(chunk.order)} \u9875`,
       };
       return;
     }
 
-    current.text += `\n${chunk.text}`;
     current.chunks.push(chunk);
   });
 
-  if (current) chapters.push(current);
+  if (current) chapterDrafts.push(current);
 
-  return chapters.filter((chapter) => !isTocNoise(chapter.title));
+  return chapterDrafts
+    .filter((draft) => !isTocNoise(draft.title))
+    .map((draft) =>
+      createTenderChapterFromChunks({
+        document,
+        title: draft.title,
+        chunks: draft.chunks,
+      }),
+    );
 };
 
 const buildRegulationCandidatesForChapter = (chapter: TenderChapter, regulations: Regulation[]) => {
@@ -191,6 +310,302 @@ const buildChapterMetadataSummary = (document: DocumentRecord) => ({
   })),
 });
 
+export const estimateChapterPromptTokensProxy = (params: {
+  chapter: TenderChapter;
+  document: DocumentRecord;
+  regulations: Regulation[];
+}) => {
+  const regulationCandidates = buildRegulationCandidatesForChapter(params.chapter, params.regulations);
+  const userPrompt = JSON.stringify(
+    {
+      metadata: buildChapterMetadataSummary(params.document),
+      chapter: {
+        id: params.chapter.id,
+        title: params.chapter.title,
+        pageRange: params.chapter.pageRange,
+        chunks: params.chapter.chunks,
+      },
+      regulationCandidates,
+      outputContract: chapterReviewOutputContract,
+    },
+    null,
+    2,
+  );
+
+  return estimatePromptTokensProxy(`${chapterReviewSystemPrompt}\n${userPrompt}`);
+};
+
+const mergeTwoTenderChapters = (
+  document: DocumentRecord,
+  left: TenderChapter,
+  right: TenderChapter,
+): TenderChapter =>
+  createTenderChapterFromChunks({
+    document,
+    title: resolveMergedChapterTitle(left.title, right.title),
+    chunks: [...left.chunks, ...right.chunks],
+  });
+
+const splitTenderChapterByBudget = (params: {
+  chapter: TenderChapter;
+  document: DocumentRecord;
+  estimateTokens: (chapter: TenderChapter) => number;
+  targetMaxTokens: number;
+  hardMaxTokens: number;
+}) => {
+  if (params.chapter.chunks.length <= 1) {
+    return [params.chapter];
+  }
+
+  const roughParts: TenderChapter[] = [];
+  let buffer: DocumentChunk[] = [];
+
+  for (const chunk of params.chapter.chunks) {
+    const nextBuffer = [...buffer, chunk];
+    const nextCandidate = createTenderChapterFromChunks({
+      document: params.document,
+      title: params.chapter.title,
+      chunks: nextBuffer,
+    });
+
+    if (buffer.length > 0 && params.estimateTokens(nextCandidate) > params.targetMaxTokens) {
+      roughParts.push(
+        createTenderChapterFromChunks({
+          document: params.document,
+          title: params.chapter.title,
+          chunks: buffer,
+        }),
+      );
+      buffer = [chunk];
+      continue;
+    }
+
+    buffer = nextBuffer;
+  }
+
+  if (buffer.length > 0) {
+    roughParts.push(
+      createTenderChapterFromChunks({
+        document: params.document,
+        title: params.chapter.title,
+        chunks: buffer,
+      }),
+    );
+  }
+
+  const hardLimitedParts: TenderChapter[] = [];
+  for (const part of roughParts) {
+    if (params.estimateTokens(part) <= params.hardMaxTokens || part.chunks.length <= 1) {
+      hardLimitedParts.push(part);
+      continue;
+    }
+
+    const queue: TenderChapter[] = [part];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (params.estimateTokens(current) <= params.hardMaxTokens || current.chunks.length <= 1) {
+        hardLimitedParts.push(current);
+        continue;
+      }
+
+      const mid = Math.ceil(current.chunks.length / 2);
+      const leftPart = createTenderChapterFromChunks({
+        document: params.document,
+        title: current.title,
+        chunks: current.chunks.slice(0, mid),
+      });
+      const rightPart = createTenderChapterFromChunks({
+        document: params.document,
+        title: current.title,
+        chunks: current.chunks.slice(mid),
+      });
+      queue.unshift(rightPart);
+      queue.unshift(leftPart);
+    }
+  }
+
+  if (hardLimitedParts.length <= 1) {
+    return hardLimitedParts;
+  }
+
+  return hardLimitedParts.map((part, index) =>
+    index === 0
+      ? part
+      : createTenderChapterFromChunks({
+          document: params.document,
+          title: `${params.chapter.title} (part ${index + 1})`,
+          chunks: part.chunks,
+        }),
+  );
+};
+
+export const rebalanceChaptersByTokenBudget = (params: {
+  chapters: TenderChapter[];
+  document: DocumentRecord;
+  regulations: Regulation[];
+  estimateTokens?: (chapter: TenderChapter) => number;
+  config?: Partial<ChapterTokenBudgetConfig>;
+}) => {
+  if (params.chapters.length === 0) {
+    return params.chapters;
+  }
+
+  const budget: ChapterTokenBudgetConfig = {
+    ...defaultChapterTokenBudgetConfig,
+    ...params.config,
+  };
+
+  const estimateTokens =
+    params.estimateTokens ??
+    ((chapter: TenderChapter) =>
+      estimateChapterPromptTokensProxy({
+        chapter,
+        document: params.document,
+        regulations: params.regulations,
+      }));
+
+  const chapters = params.chapters.map((chapter) =>
+    createTenderChapterFromChunks({
+      document: params.document,
+      title: chapter.title,
+      chunks: chapter.chunks,
+    }),
+  );
+
+  let index = 0;
+  while (index < chapters.length) {
+    const chapter = chapters[index];
+    if (estimateTokens(chapter) <= budget.targetMaxTokens || chapter.chunks.length <= 1) {
+      index += 1;
+      continue;
+    }
+
+    const splitParts = splitTenderChapterByBudget({
+      chapter,
+      document: params.document,
+      estimateTokens,
+      targetMaxTokens: budget.targetMaxTokens,
+      hardMaxTokens: budget.hardMaxTokens,
+    });
+
+    if (splitParts.length <= 1) {
+      index += 1;
+      continue;
+    }
+
+    chapters.splice(index, 1, ...splitParts);
+    index += splitParts.length;
+  }
+
+  let guard = 0;
+  const mergeGuardLimit = Math.max(10, chapters.length * 5);
+  while (chapters.length > 1 && guard < mergeGuardLimit) {
+    guard += 1;
+    let changed = false;
+
+    for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+      const current = chapters[chapterIndex];
+      const currentTokens = estimateTokens(current);
+      if (currentTokens >= budget.targetMinTokens) {
+        continue;
+      }
+
+      const candidates: Array<{
+        mergeStartIndex: number;
+        merged: TenderChapter;
+        mergedTokens: number;
+      }> = [];
+
+      if (chapterIndex > 0) {
+        const merged = mergeTwoTenderChapters(params.document, chapters[chapterIndex - 1], current);
+        candidates.push({
+          mergeStartIndex: chapterIndex - 1,
+          merged,
+          mergedTokens: estimateTokens(merged),
+        });
+      }
+
+      if (chapterIndex < chapters.length - 1) {
+        const merged = mergeTwoTenderChapters(params.document, current, chapters[chapterIndex + 1]);
+        candidates.push({
+          mergeStartIndex: chapterIndex,
+          merged,
+          mergedTokens: estimateTokens(merged),
+        });
+      }
+
+      if (candidates.length === 0) {
+        continue;
+      }
+
+      const withinHardMax = candidates.filter((candidate) => candidate.mergedTokens <= budget.hardMaxTokens);
+      const pool = withinHardMax.length > 0 ? withinHardMax : candidates;
+      pool.sort((left, right) => {
+        const leftPenalty =
+          left.mergedTokens <= budget.targetMaxTokens ? 0 : (left.mergedTokens - budget.targetMaxTokens) + 100_000;
+        const rightPenalty =
+          right.mergedTokens <= budget.targetMaxTokens
+            ? 0
+            : (right.mergedTokens - budget.targetMaxTokens) + 100_000;
+        const leftScore = leftPenalty + Math.abs(left.mergedTokens - budget.targetMidTokens);
+        const rightScore = rightPenalty + Math.abs(right.mergedTokens - budget.targetMidTokens);
+
+        if (leftScore !== rightScore) {
+          return leftScore - rightScore;
+        }
+        return left.mergedTokens - right.mergedTokens;
+      });
+
+      const best = pool[0];
+      chapters.splice(best.mergeStartIndex, 2, best.merged);
+      changed = true;
+      break;
+    }
+
+    if (!changed) {
+      break;
+    }
+  }
+
+  if (chapters.length > 1) {
+    const tailIndex = chapters.length - 1;
+    const tail = chapters[tailIndex];
+    if (estimateTokens(tail) < budget.tailMinTokens) {
+      const mergedTail = mergeTwoTenderChapters(params.document, chapters[tailIndex - 1], tail);
+      if (estimateTokens(mergedTail) <= budget.hardMaxTokens) {
+        chapters.splice(tailIndex - 1, 2, mergedTail);
+      }
+    }
+  }
+
+  index = 0;
+  while (index < chapters.length) {
+    const chapter = chapters[index];
+    if (estimateTokens(chapter) <= budget.hardMaxTokens || chapter.chunks.length <= 1) {
+      index += 1;
+      continue;
+    }
+
+    const splitParts = splitTenderChapterByBudget({
+      chapter,
+      document: params.document,
+      estimateTokens,
+      targetMaxTokens: budget.hardMaxTokens,
+      hardMaxTokens: budget.hardMaxTokens,
+    });
+
+    if (splitParts.length <= 1) {
+      index += 1;
+      continue;
+    }
+
+    chapters.splice(index, 1, ...splitParts);
+    index += splitParts.length;
+  }
+
+  return chapters;
+};
+
 const reviewTenderChapter = async (
   chapter: TenderChapter,
   document: DocumentRecord,
@@ -203,12 +618,7 @@ const reviewTenderChapter = async (
 
   const review = chapterReviewSchema.parse(
     await requestStructuredAiReview<unknown>({
-      systemPrompt: [
-        "You are a tender chapter review assistant.",
-        "Detect compliance risks based only on the input chapter and regulation candidates.",
-        "If evidence is insufficient, return an empty findings array.",
-        "Return valid JSON only.",
-      ].join("\n"),
+      systemPrompt: chapterReviewSystemPrompt,
       userPrompt: JSON.stringify(
         {
           metadata: buildChapterMetadataSummary(document),
@@ -217,28 +627,9 @@ const reviewTenderChapter = async (
             title: chapter.title,
             pageRange: chapter.pageRange,
             chunks: chapter.chunks,
-            text: chapter.text,
           },
           regulationCandidates,
-          outputContract: {
-            chapter_title: "string",
-            summary: "string",
-            findings: [
-              {
-                title: "string",
-                category:
-                  "\u8d44\u683c\u6761\u4ef6|\u8bc4\u6807\u529e\u6cd5|\u4fdd\u8bc1\u91d1\u6761\u6b3e|\u5546\u52a1\u6761\u6b3e|\u6280\u672f\u6761\u6b3e|\u65f6\u95f4\u8282\u70b9|\u6587\u4ef6\u5b8c\u6574\u6027|\u5176\u4ed6",
-                risk: "\u9ad8|\u4e2d|\u4f4e",
-                description: "string",
-                recommendation: "string",
-                references: ["string"],
-                sourceChunkIds: ["string"],
-                regulationChunkIds: ["string"],
-                needsHumanReview: true,
-                confidence: 0,
-              },
-            ],
-          },
+          outputContract: chapterReviewOutputContract,
         },
         null,
         2,
@@ -337,8 +728,14 @@ export const generateTenderChapterAiFindings = async (params: {
     stage: "chapter_review" | "cross_scan";
   }) => void;
 }): Promise<{ findings: Finding[] }> => {
-  const chapters = extractTenderChapters(params.tenderDocument);
-  if (chapters.length === 0) return { findings: [] };
+  const extractedChapters = extractTenderChapters(params.tenderDocument);
+  if (extractedChapters.length === 0) return { findings: [] };
+
+  const chapters = rebalanceChaptersByTokenBudget({
+    chapters: extractedChapters,
+    document: params.tenderDocument,
+    regulations: params.regulations,
+  });
 
   const chapterConcurrency = params.chapterConcurrency ?? {
     initial: 3,
