@@ -214,6 +214,15 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
   getSuccessMetrics?: (result: TResult) => {
     hadRateLimitRetry?: boolean;
   };
+  collectResults?: boolean;
+  onItemSuccess?: (params: {
+    item: TItem;
+    index: number;
+    result: TResult;
+    completed: number;
+    total: number;
+    currentConcurrency: number;
+  }) => void;
   onItemCompleted?: (params: {
     item: TItem;
     index: number;
@@ -231,9 +240,10 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
   const signal = createCombinedAbortSignal(
     [externalSignal, internalAbortController.signal].filter((item): item is AbortSignal => Boolean(item)),
   );
+  const shouldCollectResults = params.collectResults !== false;
 
   return await new Promise<TResult[]>((resolve, reject) => {
-    const results = new Array<TResult>(params.items.length);
+    const results = shouldCollectResults ? new Array<TResult>(params.items.length) : [];
     let nextIndex = 0;
     let activeCount = 0;
     let completedCount = 0;
@@ -249,7 +259,7 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
     const settleWithSuccess = () => {
       if (settled) return;
       settled = true;
-      resolve(results);
+      resolve(results as TResult[]);
     };
 
     const pumpQueue = () => {
@@ -286,13 +296,24 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
           .then((result) => {
             if (settled) return;
 
-            results[index] = result;
+            if (shouldCollectResults) {
+              results[index] = result;
+            }
             completedCount += 1;
             activeCount -= 1;
 
             const metrics = params.getSuccessMetrics?.(result);
+            const currentConcurrency = params.controller.getCurrentConcurrency();
             params.controller.recordSuccess({
               hadRateLimitRetry: metrics?.hadRateLimitRetry,
+            });
+            params.onItemSuccess?.({
+              item: params.items[index],
+              index,
+              result,
+              completed: completedCount,
+              total: params.items.length,
+              currentConcurrency,
             });
 
             params.onItemCompleted?.({
@@ -300,7 +321,7 @@ export const runWithAdaptiveChapterConcurrency = async <TItem, TResult>(params: 
               index,
               completed: completedCount,
               total: params.items.length,
-              currentConcurrency: params.controller.getCurrentConcurrency(),
+              currentConcurrency,
             });
 
             pumpQueue();

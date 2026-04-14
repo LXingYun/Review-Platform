@@ -59,7 +59,7 @@ export const getAiConfig = () => {
     value: process.env.TENDER_CHAPTER_REVIEW_CONCURRENCY,
     fallback: 3,
     min: 1,
-    max: 8,
+    max: 12,
   });
 
   const chapterReviewMinConcurrency = parseNumber({
@@ -118,6 +118,6 @@ export const getReviewWorkerConcurrency = () =>
       value: process.env.REVIEW_WORKER_CONCURRENCY,
       fallback: 1,
       min: 1,
-      max: 8,
+      max: 12,
     }),
   );

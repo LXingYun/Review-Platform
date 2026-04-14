@@ -2,7 +2,41 @@ import { store } from "../store";
 import { FindingReviewLog, FindingStatus, ReviewScenario } from "../types";
 import { createId, nowIso } from "../utils";
 
+interface FindingReadCache {
+  version: number;
+  data: ReturnType<typeof store.get>;
+  documentChunkMap: Map<
+    string,
+    {
+      documentId: string;
+      documentName: string;
+      chunkId: string;
+      order: number;
+      text: string;
+    }
+  >;
+  regulationChunkMap: Map<
+    string,
+    {
+      regulationId: string;
+      regulationName: string;
+      regulationCategory: string;
+      chunkId: string;
+      order: number;
+      text: string;
+      sectionTitle?: string;
+    }
+  >;
+}
+
+let findingReadCache: FindingReadCache | null = null;
+
 const mapDocumentChunkById = () => {
+  const version = store.getVersion();
+  if (findingReadCache && findingReadCache.version === version) {
+    return findingReadCache;
+  }
+
   const data = store.get();
 
   const documentChunkMap = new Map(
@@ -37,7 +71,15 @@ const mapDocumentChunkById = () => {
     ),
   );
 
-  return { data, documentChunkMap, regulationChunkMap };
+  const nextCache: FindingReadCache = {
+    version,
+    data,
+    documentChunkMap,
+    regulationChunkMap,
+  };
+
+  findingReadCache = nextCache;
+  return nextCache;
 };
 
 const enrichFinding = (findingId: string) => {

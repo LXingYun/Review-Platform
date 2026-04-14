@@ -363,7 +363,7 @@ describe("resolveReviewExecutionMode", () => {
     expect(task).toBeTruthy();
     expect(task?.status).toBe("\u5931\u8d25");
     expect(task?.stage).toBe("failed");
-    expect(task?.stageLabel).toContain("AI request failed");
+    expect(task?.stageLabel).toContain("AI \u5ba1\u67e5\u5931\u8d25");
   });
 
   it("keeps aborted status when user aborts a running tender task", async () => {

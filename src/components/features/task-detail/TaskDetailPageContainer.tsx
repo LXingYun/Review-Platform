@@ -23,6 +23,7 @@ import {
   useUpdateFindingStatusMutation,
 } from "@/hooks/queries";
 import { useReviewNoteDraft } from "@/hooks/use-review-note-draft";
+import { usePageVisibility } from "@/hooks/use-page-visibility";
 import { useTaskEventStream } from "@/hooks/use-task-event-stream";
 import { useUnsavedNavigationGuard } from "@/hooks/use-unsaved-navigation-guard";
 import FindingDetailDialog from "./FindingDetailDialog";
@@ -41,6 +42,7 @@ const TaskDetailPageContainer = () => {
   const [humanReviewFilter, setHumanReviewFilter] = useState<"all" | "needs_review" | "no_review">("all");
   const [confidenceFilter, setConfidenceFilter] = useState<"all" | "ge_80" | "ge_60" | "lt_60">("all");
   const [reviewer, setReviewer] = useState("");
+  const { isPageVisible } = usePageVisibility();
   const selectedIssueId = selectedIssue?.id ?? "";
   const { reviewNote, setReviewNote, clearDraft, hasUnsavedDraft } = useReviewNoteDraft({
     taskId,
@@ -67,10 +69,10 @@ const TaskDetailPageContainer = () => {
 
   const { isConnected: isTaskStreamConnected } = useTaskEventStream({
     taskId,
-    enabled: Boolean(taskId),
+    enabled: Boolean(taskId) && isPageVisible,
   });
 
-  const pollingInterval = isTaskStreamConnected ? false : 3000;
+  const pollingInterval = !isPageVisible ? false : isTaskStreamConnected ? false : 3000;
 
   const { data: task, isLoading: tasksLoading } = useReviewTaskQuery(taskId, {
     enabled: Boolean(taskId),

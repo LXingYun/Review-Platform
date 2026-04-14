@@ -22,6 +22,8 @@ import {
   listTasks,
   retryReviewTask,
 } from "./services/review-service";
+import { getSharedGlobalLoadController } from "./services/global-load-controller";
+import { getRuntimeHealthSampler } from "./services/runtime-health-sampler";
 import { streamReviewTaskEvents } from "./services/review-task-stream-service";
 import {
   createBidReviewSchema,
@@ -35,6 +37,8 @@ import {
 import { createUploadMiddleware, UploadValidationError, uploadMaxFileSizeBytes } from "./services/upload-policy-service";
 
 const upload = createUploadMiddleware();
+const runtimeHealthSampler = getRuntimeHealthSampler();
+const globalLoadController = getSharedGlobalLoadController();
 
 export const createApp = () => {
   const app = express();
@@ -43,7 +47,38 @@ export const createApp = () => {
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, service: "deep-read-pro-api" });
+    const startedAt = Date.now();
+    const payload = { ok: true, service: "deep-read-pro-api" };
+    runtimeHealthSampler.recordHealthCheck({
+      latencyMs: Date.now() - startedAt,
+      timedOut: false,
+      ok: true,
+    });
+    res.json(payload);
+  });
+
+  app.get("/api/health/runtime", (_req, res) => {
+    const stats = runtimeHealthSampler.getWindowStats();
+    const loadState = globalLoadController.getState();
+
+    res.json({
+      status: loadState.status === "healthy" ? "healthy" : "degraded",
+      eventLoopLagP95Ms: stats.eventLoopLagP95Ms,
+      rssBytes: stats.latestRssBytes,
+      privateBytes: stats.latestPrivateBytes,
+      activeTasks: stats.activeTasks,
+      queuedTasks: stats.queuedTasks,
+      globalAiInFlight: stats.aiInFlight,
+      errorRateWindow: {
+        aiErrorRate: stats.aiErrorRate,
+        aiTimeoutRate: stats.aiTimeoutRate,
+        aiRateLimitRate: stats.aiRateLimitRate,
+        healthTimeoutRate: stats.healthTimeoutRate,
+      },
+      sampledAt: stats.sampledAt,
+      windowMs: stats.windowMs,
+      reason: loadState.reason,
+    });
   });
 
   app.get("/api/dashboard", (_req, res) => {

@@ -14,6 +14,8 @@ interface UseTaskEventStreamParams {
 }
 
 const findingBatchWindowMs = 100;
+const reconnectBaseDelayMs = 1_000;
+const reconnectMaxDelayMs = 15_000;
 
 const parseJsonPayload = (event: MessageEvent<string>) => {
   try {
@@ -28,6 +30,8 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
   const [isConnected, setIsConnected] = useState(false);
   const findingBufferRef = useRef<FindingListItem[]>([]);
   const findingFlushTimerRef = useRef<number | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
 
   const streamUrl = useMemo(() => {
     if (!taskId) return "";
@@ -36,6 +40,9 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
 
   useEffect(() => {
     if (!enabled || !taskId || !streamUrl) return;
+
+    let stopped = false;
+    let eventSource: EventSource | null = null;
 
     const flushFindingBuffer = () => {
       if (!taskId) return;
@@ -64,8 +71,6 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
       queryClient.invalidateQueries({ queryKey: queryKeys.findings.list({ taskId }) });
     };
 
-    const eventSource = new EventSource(streamUrl);
-
     const parseEvent = <T extends ReviewTaskSseEventType>(event: MessageEvent<string>, type: T) => {
       const rawPayload = parseJsonPayload(event);
       if (!rawPayload) return null;
@@ -86,11 +91,26 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
     };
 
     const onOpen = () => {
+      reconnectAttemptRef.current = 0;
       setIsConnected(true);
     };
 
     const onError = () => {
       setIsConnected(false);
+      if (stopped) return;
+      if (reconnectTimerRef.current !== null) return;
+
+      const delay = Math.min(
+        reconnectMaxDelayMs,
+        reconnectBaseDelayMs * 2 ** Math.max(0, reconnectAttemptRef.current),
+      );
+      reconnectAttemptRef.current += 1;
+
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        if (stopped) return;
+        connect();
+      }, delay);
     };
 
     const onSnapshot = (event: MessageEvent<string>) => {
@@ -126,31 +146,46 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
 
       flushFindingBuffer();
       setIsConnected(false);
-      eventSource.close();
+      eventSource?.close();
+      eventSource = null;
       invalidateTaskAndFindings();
+      onError();
     };
 
-    eventSource.addEventListener("open", onOpen);
-    eventSource.addEventListener("error", onError);
-    eventSource.addEventListener("snapshot", onSnapshot);
-    eventSource.addEventListener("task-updated", onTaskUpdated);
-    eventSource.addEventListener("finding-created", onFindingCreated);
-    eventSource.addEventListener("stream-error", onStreamError);
+    const connect = () => {
+      eventSource?.close();
+      eventSource = new EventSource(streamUrl);
+      eventSource.addEventListener("open", onOpen);
+      eventSource.addEventListener("error", onError);
+      eventSource.addEventListener("snapshot", onSnapshot);
+      eventSource.addEventListener("task-updated", onTaskUpdated);
+      eventSource.addEventListener("finding-created", onFindingCreated);
+      eventSource.addEventListener("stream-error", onStreamError);
+    };
+
+    connect();
 
     return () => {
+      stopped = true;
       flushFindingBuffer();
       if (findingFlushTimerRef.current !== null) {
         window.clearTimeout(findingFlushTimerRef.current);
         findingFlushTimerRef.current = null;
       }
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectAttemptRef.current = 0;
       setIsConnected(false);
-      eventSource.removeEventListener("open", onOpen);
-      eventSource.removeEventListener("error", onError);
-      eventSource.removeEventListener("snapshot", onSnapshot);
-      eventSource.removeEventListener("task-updated", onTaskUpdated);
-      eventSource.removeEventListener("finding-created", onFindingCreated);
-      eventSource.removeEventListener("stream-error", onStreamError);
-      eventSource.close();
+      eventSource?.removeEventListener("open", onOpen);
+      eventSource?.removeEventListener("error", onError);
+      eventSource?.removeEventListener("snapshot", onSnapshot);
+      eventSource?.removeEventListener("task-updated", onTaskUpdated);
+      eventSource?.removeEventListener("finding-created", onFindingCreated);
+      eventSource?.removeEventListener("stream-error", onStreamError);
+      eventSource?.close();
+      eventSource = null;
     };
   }, [enabled, queryClient, streamUrl, taskId]);
 

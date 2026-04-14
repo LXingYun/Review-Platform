@@ -19,6 +19,8 @@ type CollectionName = (typeof collections)[number];
 
 let database: DatabaseSync | null = null;
 let relationalMirrorInitialized = false;
+let snapshotCache: AppData | null = null;
+let snapshotVersion = 0;
 
 const stripUtf8Bom = (value: string) => value.replace(/^\uFEFF/, "");
 
@@ -89,9 +91,10 @@ const getDatabase = () => {
   });
 
   bootstrapDatabase(database);
+  snapshotCache = loadSnapshot(database);
 
   if (!relationalMirrorInitialized) {
-    initializeRelationalMirror(loadSnapshot(database));
+    initializeRelationalMirror(snapshotCache);
     relationalMirrorInitialized = true;
   }
 
@@ -144,6 +147,14 @@ const loadSnapshot = (db: DatabaseSync): AppData =>
     regulations: loadCollection<AppData["regulations"][number]>(db, "regulations"),
   });
 
+const getCachedSnapshot = (db: DatabaseSync) => {
+  if (!snapshotCache) {
+    snapshotCache = loadSnapshot(db);
+  }
+
+  return snapshotCache;
+};
+
 const persistSnapshot = (db: DatabaseSync, current: AppData | null, next: AppData) => {
   if (!current || current.projects !== next.projects) {
     persistCollection(db, "projects", next.projects);
@@ -184,17 +195,23 @@ const bootstrapDatabase = (db: DatabaseSync) => {
 
 export const store = {
   get(): AppData {
-    return loadSnapshot(getDatabase());
+    const db = getDatabase();
+    return getCachedSnapshot(db);
+  },
+  getVersion(): number {
+    return snapshotVersion;
   },
   update(updater: (current: AppData) => AppData): AppData {
     const db = getDatabase();
     db.exec("BEGIN IMMEDIATE;");
 
     try {
-      const current = loadSnapshot(db);
+      const current = getCachedSnapshot(db);
       const next = normalizeSnapshot(updater(current));
       persistSnapshot(db, current, next);
       db.exec("COMMIT;");
+      snapshotCache = next;
+      snapshotVersion += 1;
       enqueueRelationalMirrorSync(next);
       return next;
     } catch (error) {

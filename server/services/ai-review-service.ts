@@ -233,6 +233,7 @@ export const generateAiScenarioFindings = async (params: {
       userPrompt: prompts.userPrompt,
       seed: params.seed,
       signal: params.signal,
+      taskId: params.taskId,
     }),
   );
 

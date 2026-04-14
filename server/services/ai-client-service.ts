@@ -1,5 +1,6 @@
 import { getAiConfig } from "./ai-config-service";
 import { getSharedAiKeyPool } from "./ai-key-pool-service";
+import { getSharedAiInFlightLimiter } from "./ai-inflight-limiter";
 import {
   type AiRetryEvent,
   createAiRequestError,
@@ -7,6 +8,7 @@ import {
   parseRetryAfterMs,
   withAiRetry,
 } from "./ai-retry-service";
+import { getRuntimeHealthSampler } from "./runtime-health-sampler";
 
 const stripUtf8Bom = (value: string) => value.replace(/^\uFEFF/, "");
 
@@ -130,12 +132,15 @@ const requestChatCompletion = async (params: {
   userPrompt: string;
   seed?: number;
   signal?: AbortSignal;
+  taskId?: string;
   onRetry?: (event: AiRetryEvent) => void;
 }) => {
   const sampling = resolveAiSamplingConfig(params.seed);
   const keyPool = getSharedAiKeyPool({
     apiKeys: params.apiKeys,
   });
+  const aiInFlightLimiter = getSharedAiInFlightLimiter();
+  const runtimeHealthSampler = getRuntimeHealthSampler();
 
   return withAiRetry({
     maxAttempts: params.retryMaxAttempts,
@@ -144,6 +149,10 @@ const requestChatCompletion = async (params: {
     onRetry: params.onRetry,
     operation: async () => {
       const lease = keyPool.acquire();
+      const inFlightLease = await aiInFlightLimiter.acquire({
+        taskId: params.taskId,
+        signal: params.signal,
+      });
       const requestSignal = createRequestSignalWithTimeout({
         signal: params.signal,
         timeoutMs: params.requestTimeoutMs,
@@ -194,24 +203,39 @@ const requestChatCompletion = async (params: {
         }
 
         keyPool.reportSuccess({ keyId: lease.keyId });
+        runtimeHealthSampler.recordAiRequestResult({
+          success: true,
+        });
         return content;
       } catch (error) {
         if (requestSignal.didTimeout()) {
+          runtimeHealthSampler.recordAiRequestResult({
+            success: false,
+            timedOut: true,
+            rateLimited: false,
+          });
           throw createAiRequestError({
             message: `AI request timed out after ${params.requestTimeoutMs}ms`,
             retryable: true,
           });
         }
 
-        if (isRateLimitedAiError(error)) {
+        const rateLimited = isRateLimitedAiError(error);
+        if (rateLimited) {
           keyPool.reportRateLimited({
             keyId: lease.keyId,
             cooldownMs: params.keyCooldownMs,
           });
         }
+        runtimeHealthSampler.recordAiRequestResult({
+          success: false,
+          timedOut: false,
+          rateLimited,
+        });
         throw error;
       } finally {
         requestSignal.dispose();
+        inFlightLease.release();
       }
     },
   });
@@ -228,6 +252,7 @@ const repairStructuredJson = async <T>(params: {
   rawContent: string;
   seed?: number;
   signal?: AbortSignal;
+  taskId?: string;
   onRetry?: (event: AiRetryEvent) => void;
 }) => {
   const repairedContent = await requestChatCompletion({
@@ -246,6 +271,7 @@ const repairStructuredJson = async <T>(params: {
     userPrompt: params.rawContent,
     seed: params.seed,
     signal: params.signal,
+    taskId: params.taskId,
     onRetry: params.onRetry,
   });
 
@@ -257,6 +283,7 @@ export const requestStructuredAiReview = async <T>(params: {
   userPrompt: string;
   seed?: number;
   signal?: AbortSignal;
+  taskId?: string;
   onRetry?: (event: AiRetryEvent) => void;
 }): Promise<T> => {
   const config = getAiConfig();
@@ -277,6 +304,7 @@ export const requestStructuredAiReview = async <T>(params: {
     userPrompt: params.userPrompt,
     seed: params.seed,
     signal: params.signal,
+    taskId: params.taskId,
     onRetry: params.onRetry,
   });
 
@@ -295,6 +323,7 @@ export const requestStructuredAiReview = async <T>(params: {
         rawContent: content,
         seed: params.seed,
         signal: params.signal,
+        taskId: params.taskId,
         onRetry: params.onRetry,
       });
     } catch {

@@ -610,6 +610,7 @@ const reviewTenderChapter = async (
   chapter: TenderChapter,
   document: DocumentRecord,
   regulations: Regulation[],
+  taskId: string,
   seed?: number,
   signal?: AbortSignal,
 ) => {
@@ -636,6 +637,7 @@ const reviewTenderChapter = async (
       ),
       seed,
       signal,
+      taskId,
       onRetry: (event: AiRetryEvent) => {
         if (event.rateLimited) {
           hadRateLimitRetry = true;
@@ -663,6 +665,7 @@ const buildCrossSectionPairs = (chapters: TenderChapter[]) => {
 const runCrossSectionScan = async (
   chapters: TenderChapter[],
   document: DocumentRecord,
+  taskId: string,
   seed?: number,
   signal?: AbortSignal,
 ) => {
@@ -706,6 +709,7 @@ const runCrossSectionScan = async (
       ),
       seed,
       signal,
+      taskId,
     }),
   );
 };
@@ -718,6 +722,10 @@ export const generateTenderChapterAiFindings = async (params: {
   chapterConcurrency?: {
     initial: number;
     min: number;
+  };
+  runtimeMetricsProvider?: () => {
+    rssBytes: number;
+    eventLoopLagMs: number;
   };
   seed?: number;
   signal?: AbortSignal;
@@ -745,17 +753,46 @@ export const generateTenderChapterAiFindings = async (params: {
   const concurrencyController = createReviewChapterConcurrencyController({
     initialConcurrency: chapterConcurrency.initial,
     minConcurrency: chapterConcurrency.min,
+    getRuntimeMetrics: params.runtimeMetricsProvider,
   });
 
-  const chapterResults = await runWithAdaptiveChapterConcurrency({
+  const chapterFindings: Finding[] = [];
+  await runWithAdaptiveChapterConcurrency({
     items: chapters,
     controller: concurrencyController,
     signal: params.signal,
     worker: ({ item, signal }) =>
-      reviewTenderChapter(item, params.tenderDocument, params.regulations, params.seed, signal),
+      reviewTenderChapter(item, params.tenderDocument, params.regulations, params.taskId, params.seed, signal),
     getSuccessMetrics: (result) => ({
       hadRateLimitRetry: result.hadRateLimitRetry,
     }),
+    collectResults: false,
+    onItemSuccess: ({ result }) => {
+      chapterFindings.push(
+        ...result.review.findings.map((finding) => ({
+          id: createId("finding"),
+          projectId: params.projectId,
+          taskId: params.taskId,
+          title: finding.title,
+          category: finding.category as TenderFindingCategory,
+          risk: finding.risk,
+          status: "\u5f85\u590d\u6838",
+          location: result.review.chapter_title,
+          description: finding.description,
+          recommendation: finding.recommendation,
+          references: finding.references,
+          sourceChunkIds: finding.sourceChunkIds,
+          candidateChunkIds: [],
+          regulationChunkIds: finding.regulationChunkIds,
+          needsHumanReview: finding.needsHumanReview,
+          confidence: finding.confidence,
+          reviewStage: "chapter_review",
+          scenario: "tender_compliance",
+          reviewLogs: [],
+          createdAt: nowIso(),
+        }) as Finding),
+      );
+    },
     onItemCompleted: ({ item, completed, total }) => {
       params.onProgress?.({
         current: completed,
@@ -766,31 +803,6 @@ export const generateTenderChapterAiFindings = async (params: {
     },
   });
 
-  const chapterFindings = chapterResults.flatMap((result) =>
-    result.review.findings.map((finding) => ({
-      id: createId("finding"),
-      projectId: params.projectId,
-      taskId: params.taskId,
-      title: finding.title,
-      category: finding.category as TenderFindingCategory,
-      risk: finding.risk,
-      status: "\u5f85\u590d\u6838",
-      location: result.review.chapter_title,
-      description: finding.description,
-      recommendation: finding.recommendation,
-      references: finding.references,
-      sourceChunkIds: finding.sourceChunkIds,
-      candidateChunkIds: [],
-      regulationChunkIds: finding.regulationChunkIds,
-      needsHumanReview: finding.needsHumanReview,
-      confidence: finding.confidence,
-      reviewStage: "chapter_review",
-      scenario: "tender_compliance",
-      reviewLogs: [],
-      createdAt: nowIso(),
-    }) as Finding),
-  );
-
   params.onProgress?.({
     current: chapters.length,
     total: chapters.length,
@@ -798,12 +810,16 @@ export const generateTenderChapterAiFindings = async (params: {
     stage: "cross_scan",
   });
 
-  const crossScan = await runCrossSectionScan(chapters, params.tenderDocument, params.seed, params.signal).catch(
-    () => ({
-      conflicts: [],
-      summary: "",
-    }),
-  );
+  const crossScan = await runCrossSectionScan(
+    chapters,
+    params.tenderDocument,
+    params.taskId,
+    params.seed,
+    params.signal,
+  ).catch(() => ({
+    conflicts: [],
+    summary: "",
+  }));
 
   const crossFindings = crossScan.conflicts.map((conflict) =>
     ({
