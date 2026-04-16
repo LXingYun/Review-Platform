@@ -1,6 +1,10 @@
-import type { ReviewScenario, ReviewTask } from "../types";
+import type { ReviewConsistencyMode, ReviewScenario, ReviewTask } from "../types";
 import { createId, nowIso } from "../utils";
 import { getAiConfig } from "./ai-config-service";
+import {
+  buildConsistencyFingerprint,
+  buildScenarioPromptVersion,
+} from "./review-consistency-service";
 import { getSharedReviewTaskDispatcher } from "./review-task-dispatcher";
 import {
   buildReviewTaskName,
@@ -35,6 +39,7 @@ export const createReviewTask = async (params: {
   scenario: ReviewScenario;
   documentIds: string[];
   regulationIds?: string[];
+  consistencyMode?: ReviewConsistencyMode;
 }) => {
   const aiConfig = getAiConfig();
   if (!aiConfig.enabled) {
@@ -61,11 +66,24 @@ export const createReviewTask = async (params: {
     availableRegulations: creationContext.availableRegulations,
     requestedRegulationIds: params.regulationIds,
   });
+  const defaultConsistencyMode =
+    process.env.REVIEW_DEFAULT_CONSISTENCY_MODE === "strict" ? "strict" : "balanced";
+  const consistencyMode = params.consistencyMode ?? defaultConsistencyMode;
+  const consistencyFingerprint = buildConsistencyFingerprint({
+    scenario: params.scenario,
+    consistencyMode,
+    documents: creationContext.taskDocuments,
+    regulations: regulationContext.regulationSnapshot ?? [],
+    model: aiConfig.model,
+    promptVersion: buildScenarioPromptVersion(params.scenario),
+  });
 
   const task: ReviewTask = {
     id: createId("task"),
     projectId: creationContext.project.id,
     scenario: params.scenario,
+    consistencyMode,
+    consistencyFingerprint,
     name: taskName,
     status: reviewTaskStatusText.queued,
     stage: "queued",

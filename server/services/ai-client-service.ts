@@ -1,4 +1,5 @@
 import { getAiConfig } from "./ai-config-service";
+import { resolveUnitKey } from "./ai-key-selection-service";
 import { getSharedAiKeyPool } from "./ai-key-pool-service";
 import { getSharedAiInFlightLimiter } from "./ai-inflight-limiter";
 import {
@@ -9,6 +10,7 @@ import {
   withAiRetry,
 } from "./ai-retry-service";
 import { getRuntimeHealthSampler } from "./runtime-health-sampler";
+import type { ReviewConsistencyMode } from "../types";
 
 const stripUtf8Bom = (value: string) => value.replace(/^\uFEFF/, "");
 
@@ -133,6 +135,9 @@ const requestChatCompletion = async (params: {
   seed?: number;
   signal?: AbortSignal;
   taskId?: string;
+  consistencyMode?: ReviewConsistencyMode;
+  consistencyFingerprint?: string;
+  reviewUnitId?: string;
   onRetry?: (event: AiRetryEvent) => void;
 }) => {
   const sampling = resolveAiSamplingConfig(params.seed);
@@ -146,9 +151,18 @@ const requestChatCompletion = async (params: {
     maxAttempts: params.retryMaxAttempts,
     baseDelayMs: params.retryBaseDelayMs,
     signal: params.signal,
+    deterministicDelay: params.consistencyMode === "strict",
     onRetry: params.onRetry,
     operation: async () => {
-      const lease = keyPool.acquire();
+      const fixedLease =
+        params.consistencyMode === "strict" && params.consistencyFingerprint && params.reviewUnitId
+          ? resolveUnitKey({
+              apiKeys: params.apiKeys,
+              fingerprint: params.consistencyFingerprint,
+              reviewUnitId: params.reviewUnitId,
+            })
+          : null;
+      const lease = fixedLease ?? keyPool.acquire();
       const inFlightLease = await aiInFlightLimiter.acquire({
         taskId: params.taskId,
         signal: params.signal,
@@ -202,7 +216,9 @@ const requestChatCompletion = async (params: {
           });
         }
 
-        keyPool.reportSuccess({ keyId: lease.keyId });
+        if (!fixedLease) {
+          keyPool.reportSuccess({ keyId: lease.keyId });
+        }
         runtimeHealthSampler.recordAiRequestResult({
           success: true,
         });
@@ -221,7 +237,7 @@ const requestChatCompletion = async (params: {
         }
 
         const rateLimited = isRateLimitedAiError(error);
-        if (rateLimited) {
+        if (rateLimited && !fixedLease) {
           keyPool.reportRateLimited({
             keyId: lease.keyId,
             cooldownMs: params.keyCooldownMs,
@@ -253,6 +269,9 @@ const repairStructuredJson = async <T>(params: {
   seed?: number;
   signal?: AbortSignal;
   taskId?: string;
+  consistencyMode?: ReviewConsistencyMode;
+  consistencyFingerprint?: string;
+  reviewUnitId?: string;
   onRetry?: (event: AiRetryEvent) => void;
 }) => {
   const repairedContent = await requestChatCompletion({
@@ -266,12 +285,16 @@ const repairStructuredJson = async <T>(params: {
     systemPrompt: [
       "You are a JSON repair assistant.",
       "Repair the user input into valid JSON.",
+      "Preserve the original language of all string values. Do not translate between Chinese and English.",
       "Do not add explanations or change field semantics. Return JSON only.",
     ].join("\n"),
     userPrompt: params.rawContent,
     seed: params.seed,
     signal: params.signal,
     taskId: params.taskId,
+    consistencyMode: params.consistencyMode,
+    consistencyFingerprint: params.consistencyFingerprint,
+    reviewUnitId: params.reviewUnitId,
     onRetry: params.onRetry,
   });
 
@@ -284,6 +307,9 @@ export const requestStructuredAiReview = async <T>(params: {
   seed?: number;
   signal?: AbortSignal;
   taskId?: string;
+  consistencyMode?: ReviewConsistencyMode;
+  consistencyFingerprint?: string;
+  reviewUnitId?: string;
   onRetry?: (event: AiRetryEvent) => void;
 }): Promise<T> => {
   const config = getAiConfig();
@@ -305,6 +331,9 @@ export const requestStructuredAiReview = async <T>(params: {
     seed: params.seed,
     signal: params.signal,
     taskId: params.taskId,
+    consistencyMode: params.consistencyMode,
+    consistencyFingerprint: params.consistencyFingerprint,
+    reviewUnitId: params.reviewUnitId,
     onRetry: params.onRetry,
   });
 
@@ -324,6 +353,9 @@ export const requestStructuredAiReview = async <T>(params: {
         seed: params.seed,
         signal: params.signal,
         taskId: params.taskId,
+        consistencyMode: params.consistencyMode,
+        consistencyFingerprint: params.consistencyFingerprint,
+        reviewUnitId: params.reviewUnitId,
         onRetry: params.onRetry,
       });
     } catch {

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { store } from "../store";
 import { DocumentRecord, DocumentRole } from "../types";
@@ -12,6 +13,16 @@ const ensureUploadDir = () => {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
 };
+
+const buildContentHash = (fileBuffer: Buffer) => createHash("sha256").update(fileBuffer).digest("hex");
+
+const cloneChunksForDocument = (source: DocumentRecord, documentId: string) =>
+  source.chunks.map((chunk, index) => ({
+    id: `${documentId}-chunk-${index + 1}`,
+    order: chunk.order,
+    text: chunk.text,
+    sectionTitle: chunk.sectionTitle,
+  }));
 
 export const listDocuments = (projectId?: string) => {
   const data = store.get();
@@ -41,18 +52,31 @@ export const saveUploadedDocument = async (params: {
   }
 
   const documentId = createId("doc");
+  const contentHash = buildContentHash(params.file.buffer);
   const extension = extensionFromName(normalizedOriginalName) || ".bin";
   const storedName = `${createId("file")}-${sanitizeFileName(normalizedOriginalName.replace(extension, ""))}${extension}`;
   const storedPath = path.join(uploadDir, storedName);
 
   fs.writeFileSync(storedPath, params.file.buffer);
 
-  const parsedDocument = await parseDocumentBuffer({
-    originalName: normalizedOriginalName,
-    mimeType: params.file.mimetype || "application/octet-stream",
-    fileBuffer: params.file.buffer,
-    chunkIdPrefix: documentId,
-  });
+  const existingDocument = store.get().documents.find(
+    (document) => document.contentHash === contentHash,
+  );
+
+  const parsedDocument = existingDocument
+    ? {
+        pageCount: existingDocument.pageCount,
+        parseMethod: existingDocument.parseMethod,
+        textPreview: existingDocument.textPreview,
+        extractedText: existingDocument.extractedText,
+        chunks: cloneChunksForDocument(existingDocument, documentId),
+      }
+    : await parseDocumentBuffer({
+        originalName: normalizedOriginalName,
+        mimeType: params.file.mimetype || "application/octet-stream",
+        fileBuffer: params.file.buffer,
+        chunkIdPrefix: documentId,
+      });
 
   const document: DocumentRecord = {
     id: documentId,
@@ -69,6 +93,7 @@ export const saveUploadedDocument = async (params: {
     textPreview: parsedDocument.textPreview,
     extractedText: parsedDocument.extractedText,
     chunks: parsedDocument.chunks,
+    contentHash,
     uploadedAt: nowIso(),
   };
 

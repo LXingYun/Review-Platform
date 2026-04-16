@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import type { DocumentRecord } from "../../server/types";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DocumentRecord, Regulation } from "../../server/types";
 import {
   extractTenderChapters,
   generateTenderChapterAiFindings,
@@ -26,6 +26,95 @@ const createDocument = (chunkTexts: string[]): DocumentRecord => ({
     text,
   })),
   uploadedAt: new Date().toISOString(),
+});
+
+const createRegulation = (chunkTexts: string[]): Regulation => ({
+  id: "reg-test",
+  name: "示例法规",
+  category: "法律",
+  ruleCount: chunkTexts.length,
+  updated: "2024-01-01",
+  textPreview: chunkTexts[0] ?? "",
+  chunks: chunkTexts.map((text, index) => ({
+    id: `reg-chunk-${index + 1}`,
+    order: index + 1,
+    text,
+  })),
+  sections: [
+    {
+      title: "示例章节",
+      rules: chunkTexts.length,
+    },
+  ],
+});
+
+const chapterReviewSystemPromptForTest = [
+  "You are a tender chapter review assistant.",
+  "Detect compliance risks based only on the input chapter and regulation candidates.",
+  "Use chapter chunks as the only source text context.",
+  "If evidence is insufficient, return an empty findings array.",
+  "Return valid JSON only.",
+].join("\n");
+
+const chapterReviewOutputContractForTest = {
+  chapter_title: "string",
+  summary: "string",
+  findings: [
+    {
+      title: "string",
+      category: "资格条件|评标办法|保证金条款|商务条款|技术条款|时间节点|文件完整性|其他",
+      risk: "高|中|低",
+      description: "string",
+      recommendation: "string",
+      references: ["string"],
+      sourceChunkIds: ["string"],
+      regulationChunkIds: ["string"],
+      needsHumanReview: true,
+      confidence: 0,
+    },
+  ],
+} as const;
+
+const buildChapterMetadataSummaryForTest = (document: DocumentRecord) => ({
+  filename: document.originalName,
+  pageCount: document.pageCount,
+  textPreview: document.textPreview,
+  topChunks: document.chunks.slice(0, 5).map((chunk) => ({
+    id: chunk.id,
+    order: chunk.order,
+    text: chunk.text,
+  })),
+});
+
+const countNonWhitespace = (value: string) => value.replace(/\s+/g, "").length;
+
+const estimateChapterPromptTokensNaively = (params: {
+  chapter: ReturnType<typeof extractTenderChapters>[number];
+  document: DocumentRecord;
+}) =>
+  countNonWhitespace(
+    `${chapterReviewSystemPromptForTest}\n${JSON.stringify(
+      {
+        metadata: buildChapterMetadataSummaryForTest(params.document),
+        chapter: {
+          id: params.chapter.id,
+          title: params.chapter.title,
+          pageRange: params.chapter.pageRange,
+          chunks: params.chapter.chunks,
+        },
+        regulationCandidates: [],
+        outputContract: chapterReviewOutputContractForTest,
+      },
+      null,
+      2,
+    )}`,
+  );
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.resetModules();
+  vi.doUnmock("../../server/services/regulation-match-service");
 });
 
 describe("extractTenderChapters", () => {
@@ -172,6 +261,128 @@ describe("extractTenderChapters", () => {
 
     expect(rebalanced).toHaveLength(2);
     expect(estimateByChunkChars(rebalanced[rebalanced.length - 1])).toBeGreaterThanOrEqual(20);
+  });
+
+  it("keeps rebalance decisions when using the injected chapter estimator", async () => {
+    const { createTenderChapterPromptEstimator } = await import(
+      "../../server/services/tender-chapter-estimator-service"
+    );
+
+    const chunkTexts: string[] = [];
+    for (let index = 1; index <= 18; index += 1) {
+      chunkTexts.push(`${index}. 条款 ${index}`);
+      chunkTexts.push(`细则 ${index} 需要说明的内容`);
+    }
+
+    const document = createDocument(chunkTexts);
+    const extracted = extractTenderChapters(document);
+    const estimator = createTenderChapterPromptEstimator({
+      document,
+      regulations: [],
+      systemPrompt: chapterReviewSystemPromptForTest,
+      metadata: buildChapterMetadataSummaryForTest(document),
+      outputContract: chapterReviewOutputContractForTest,
+    });
+    const config = {
+      targetMinTokens: 90,
+      targetMaxTokens: 180,
+      targetMidTokens: 140,
+      hardMaxTokens: 220,
+      tailMinTokens: 70,
+    };
+
+    const baseline = rebalanceChaptersByTokenBudget({
+      chapters: extracted,
+      document,
+      regulations: [],
+      estimateTokens: (chapter) => estimateChapterPromptTokensNaively({ chapter, document }),
+      config,
+    });
+    const optimized = rebalanceChaptersByTokenBudget({
+      chapters: extracted,
+      document,
+      regulations: [],
+      estimateTokens: estimator,
+      config,
+    });
+
+    expect(optimized.map((chapter) => chapter.chunks.map((chunk) => chunk.id))).toEqual(
+      baseline.map((chapter) => chapter.chunks.map((chunk) => chunk.id)),
+    );
+  });
+
+  it("caches repeated chapter span estimates", async () => {
+    const { createTenderChapterPromptEstimator } = await import(
+      "../../server/services/tender-chapter-estimator-service"
+    );
+
+    const document = createDocument([
+      "第1章 总则",
+      "首章内容 1",
+      "首章内容 2",
+      "首章内容 3",
+    ]);
+    const chapter = extractTenderChapters(document)[0];
+    const estimator = createTenderChapterPromptEstimator({
+      document,
+      regulations: [],
+      systemPrompt: chapterReviewSystemPromptForTest,
+      metadata: buildChapterMetadataSummaryForTest(document),
+      outputContract: chapterReviewOutputContractForTest,
+    });
+    const stringifySpy = vi.spyOn(JSON, "stringify");
+
+    estimator(chapter);
+    const firstPassStringifyCalls = stringifySpy.mock.calls.length;
+
+    estimator(chapter);
+
+    expect(stringifySpy.mock.calls.length).toBe(firstPassStringifyCalls);
+  });
+
+  it("does not repeat regulation matching for large chapter estimation", async () => {
+    const actualModule = await vi.importActual<typeof import("../../server/services/regulation-match-service")>(
+      "../../server/services/regulation-match-service"
+    );
+    const matchRegulationChunksMock = vi.fn(actualModule.matchRegulationChunks);
+
+    vi.doMock("../../server/services/regulation-match-service", () => ({
+      ...actualModule,
+      matchRegulationChunks: matchRegulationChunksMock,
+    }));
+
+    const { createTenderChapterPromptEstimator } = await import(
+      "../../server/services/tender-chapter-estimator-service"
+    );
+
+    const chunkTexts = Array.from({ length: 24 }, (_, index) => `资格要求条款 ${index + 1} 与保证金说明`);
+    const document = createDocument(chunkTexts);
+    const chapter = extractTenderChapters(document)[0];
+    const estimator = createTenderChapterPromptEstimator({
+      document,
+      regulations: [
+        createRegulation([
+          "资格条件不得排斥潜在投标人。",
+          "保证金比例应当符合法规要求。",
+          "评标办法应当公开透明。",
+        ]),
+      ],
+      systemPrompt: chapterReviewSystemPromptForTest,
+      metadata: buildChapterMetadataSummaryForTest(document),
+      outputContract: chapterReviewOutputContractForTest,
+    });
+
+    expect(matchRegulationChunksMock).toHaveBeenCalledTimes(document.chunks.length);
+
+    estimator(chapter);
+    estimator(chapter);
+    estimator({
+      ...chapter,
+      title: `${chapter.title} (copy)`,
+      chunks: chapter.chunks.slice(0, chapter.chunks.length - 1),
+    });
+
+    expect(matchRegulationChunksMock).toHaveBeenCalledTimes(document.chunks.length);
   });
 
   it("uses chunks-only chapter payload for chapter review prompt", async () => {

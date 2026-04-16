@@ -109,10 +109,11 @@ export const isRetryableAiError = (error: unknown) => {
   );
 };
 
-const resolveRetryDelayMs = (params: {
+export const resolveRetryDelayMs = (params: {
   error: unknown;
   baseDelayMs: number;
   attempt: number;
+  deterministic?: boolean;
 }) => {
   const typedError = params.error as AiErrorWithMetadata;
   const retryAfterMs =
@@ -127,6 +128,9 @@ const resolveRetryDelayMs = (params: {
   const exponent = Math.max(0, params.attempt - 1);
   const rawBackoff = params.baseDelayMs * 2 ** exponent;
   const cappedBackoff = Math.min(rawBackoff, 12_000);
+  if (params.deterministic) {
+    return cappedBackoff;
+  }
   const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(cappedBackoff * 0.2)));
   return cappedBackoff + jitter;
 };
@@ -136,6 +140,7 @@ export const withAiRetry = async <T>(params: {
   maxAttempts: number;
   baseDelayMs: number;
   signal?: AbortSignal;
+  deterministicDelay?: boolean;
   onRetry?: (event: AiRetryEvent) => void;
 }) => {
   const maxAttempts = Math.max(1, params.maxAttempts);
@@ -159,6 +164,7 @@ export const withAiRetry = async <T>(params: {
         error,
         baseDelayMs,
         attempt,
+        deterministic: params.deterministicDelay,
       });
 
       params.onRetry?.({

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const consistencyModeSchema = z.enum(["balanced", "strict"]).default("balanced");
+
 export const createProjectSchema = z.object({
   name: z.string().min(1, "项目名称不能为空"),
   type: z.enum(["招标审查", "投标审查"]),
@@ -15,12 +17,14 @@ export const createTenderReviewSchema = z.object({
   projectId: z.string().min(1),
   tenderDocumentId: z.string().min(1),
   regulationIds: z.array(z.string()).default([]),
+  consistencyMode: consistencyModeSchema.optional(),
 });
 
 export const createBidReviewSchema = z.object({
   projectId: z.string().min(1),
   tenderDocumentId: z.string().min(1),
   bidDocumentId: z.string().min(1),
+  consistencyMode: consistencyModeSchema.optional(),
 });
 
 export const updateFindingStatusSchema = z.object({

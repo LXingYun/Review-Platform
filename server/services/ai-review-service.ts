@@ -5,6 +5,7 @@ import {
   DocumentRecord,
   Finding,
   Regulation,
+  ReviewConsistencyMode,
   ReviewScenario,
   TenderFindingCategory,
 } from "../types";
@@ -125,6 +126,7 @@ const buildTenderCompliancePrompt = (documents: DocumentRecord[], regulations: R
       "category 只能从以下枚举中选择：资格条件、评标办法、保证金条款、商务条款、技术条款、时间节点、文件完整性、其他。",
       "references 只能引用输入里出现的文件名、法规名或片段标签。",
       "sourceChunkIds 和 regulationChunkIds 必须可追溯到输入片段。",
+      "title/description/recommendation/summary/references 等文本字段必须全部使用简体中文输出，除非是从输入文本中直接引用的英文片段。",
       "只返回合法 JSON。",
     ].join("\n"),
     userPrompt: JSON.stringify(
@@ -174,6 +176,7 @@ const buildBidConsistencyPrompt = (documents: DocumentRecord[]) => {
       "category 只能从以下枚举中选择：资格响应、技术响应、商务响应、附件材料、偏离风险、时间节点、其他。",
       "references 只能引用输入里出现的文件名或片段标签。",
       "sourceChunkIds 和 candidateChunkIds 必须可追溯到输入片段。",
+      "title/description/recommendation/summary/references 等文本字段必须全部使用简体中文输出，除非是从输入文本中直接引用的英文片段。",
       "只返回合法 JSON。",
     ].join("\n"),
     userPrompt: JSON.stringify(
@@ -221,6 +224,8 @@ export const generateAiScenarioFindings = async (params: {
   regulations: Regulation[];
   seed?: number;
   signal?: AbortSignal;
+  consistencyMode?: ReviewConsistencyMode;
+  consistencyFingerprint?: string;
 }) => {
   const prompts =
     params.scenario === "tender_compliance"
@@ -234,6 +239,9 @@ export const generateAiScenarioFindings = async (params: {
       seed: params.seed,
       signal: params.signal,
       taskId: params.taskId,
+      consistencyMode: params.consistencyMode,
+      consistencyFingerprint: params.consistencyFingerprint,
+      reviewUnitId: `${params.scenario}:root`,
     }),
   );
 

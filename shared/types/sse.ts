@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const reviewScenarioSchema = z.enum(["tender_compliance", "bid_consistency"]);
+export const reviewConsistencyModeSchema = z.enum(["balanced", "strict"]);
+export const reviewConsistencyResultSchema = z.enum(["first-run", "consistent", "drifted"]);
 export const reviewTaskStatusSchema = z.enum(["待审核", "进行中", "已完成", "失败", "未完成"]);
 export const reviewTaskStageSchema = z.enum([
   "queued",
@@ -68,6 +70,17 @@ const reviewTaskDetailItemSchema = z.object({
   id: z.string(),
   projectId: z.string(),
   scenario: reviewScenarioSchema,
+  consistencyMode: reviewConsistencyModeSchema.optional(),
+  consistencyFingerprint: z.string().optional(),
+  consistencyRunHash: z.string().optional(),
+  consistencyResult: reviewConsistencyResultSchema.optional(),
+  consistencyDiffSummary: z
+    .object({
+      added: z.number().int().nonnegative(),
+      removed: z.number().int().nonnegative(),
+      changedRisk: z.number().int().nonnegative(),
+    })
+    .optional(),
   name: z.string(),
   status: reviewTaskStatusSchema,
   stage: reviewTaskStageSchema,

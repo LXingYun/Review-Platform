@@ -2,6 +2,7 @@ import { store } from "../store";
 import type { AppData, Finding, Project, ReviewTask, ReviewTaskStage } from "../types";
 import { nowIso } from "../utils";
 import { getReviewTaskStageLabel } from "./review-task-stage-service";
+import { diffConsistencyHash } from "./review-consistency-service";
 import {
   reviewRiskLevelText,
   reviewTaskMessages,
@@ -64,6 +65,11 @@ const toPublicTask = (task: ReviewTask): ReviewTask => ({
   id: task.id,
   projectId: task.projectId,
   scenario: task.scenario,
+  consistencyMode: task.consistencyMode,
+  consistencyFingerprint: task.consistencyFingerprint,
+  consistencyRunHash: task.consistencyRunHash,
+  consistencyResult: task.consistencyResult,
+  consistencyDiffSummary: task.consistencyDiffSummary,
   name: task.name,
   status: task.status,
   stage: task.stage,
@@ -281,6 +287,7 @@ export class ReviewTaskRepository {
     attemptCount: number;
     riskLevel: ReviewTask["riskLevel"];
     findings: Finding[];
+    consistencyRunHash?: string;
   }) {
     store.update((current) => {
       const currentTask = current.reviewTasks.find((item) => item.id === params.taskId);
@@ -292,6 +299,31 @@ export class ReviewTaskRepository {
         return current;
       }
 
+      const previousTask = currentTask.consistencyFingerprint
+        ? current.reviewTasks
+            .filter(
+              (item) =>
+                item.id !== params.taskId &&
+                item.status === reviewTaskStatusText.completed &&
+                item.consistencyFingerprint === currentTask.consistencyFingerprint &&
+                item.consistencyRunHash,
+            )
+            .slice()
+            .sort((left, right) => (right.completedAt ?? "").localeCompare(left.completedAt ?? ""))[0]
+        : undefined;
+      const previousFindings = previousTask
+        ? current.findings.filter((item) => item.taskId === previousTask.id)
+        : [];
+      const consistencyResult = currentTask.consistencyFingerprint
+        ? previousTask
+          ? previousTask.consistencyRunHash === params.consistencyRunHash
+            ? "consistent"
+            : "drifted"
+          : "first-run"
+        : undefined;
+      const consistencyDiffSummary =
+        consistencyResult === "drifted" ? diffConsistencyHash(previousFindings, params.findings) : undefined;
+
       return {
         ...current,
         reviewTasks: current.reviewTasks.map((item) =>
@@ -301,6 +333,9 @@ export class ReviewTaskRepository {
                   ...item,
                   status: reviewTaskStatusText.completed,
                   riskLevel: params.riskLevel,
+                  consistencyRunHash: params.consistencyRunHash,
+                  consistencyResult,
+                  consistencyDiffSummary,
                   completedAt: nowIso(),
                 },
                 "completed",

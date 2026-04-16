@@ -4,6 +4,7 @@ import type { ReviewTaskDetailItem, ReviewTaskResult } from "@/lib/api-types";
 import { MutationCallbacks, invalidateQueryKeys, toError } from "./mutationUtils";
 import { queryKeys } from "./queryKeys";
 import { queryRetryDelay, shouldRetryQuery } from "./retryPolicy";
+import type { ReviewConsistencyMode } from "@/lib/api-types";
 
 export interface ReviewTasksQueryOptions {
   projectId?: string;
@@ -20,12 +21,14 @@ export interface CreateTenderReviewInput {
   projectId: string;
   tenderDocumentId: string;
   regulationIds?: string[];
+  consistencyMode?: ReviewConsistencyMode;
 }
 
 export interface CreateBidReviewInput {
   projectId: string;
   tenderDocumentId: string;
   bidDocumentId: string;
+  consistencyMode?: ReviewConsistencyMode;
 }
 
 interface DeleteReviewTaskResult {
@@ -89,13 +92,14 @@ export const useCreateTenderReviewMutation = (
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ projectId, tenderDocumentId, regulationIds = [] }: CreateTenderReviewInput) =>
+    mutationFn: ({ projectId, tenderDocumentId, regulationIds = [], consistencyMode }: CreateTenderReviewInput) =>
       apiRequest<ReviewTaskResult>("/reviews/tender-compliance", {
         method: "POST",
         body: JSON.stringify({
           projectId,
           tenderDocumentId,
           regulationIds,
+          consistencyMode,
         }),
       }),
     onSuccess: async (data, variables) => {

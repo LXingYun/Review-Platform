@@ -166,6 +166,7 @@ export const createApp = () => {
         scenario: "tender_compliance",
         documentIds: [input.tenderDocumentId],
         regulationIds: input.regulationIds,
+        consistencyMode: input.consistencyMode,
       }),
     );
   });
@@ -177,6 +178,7 @@ export const createApp = () => {
         projectId: input.projectId,
         scenario: "bid_consistency",
         documentIds: [input.tenderDocumentId, input.bidDocumentId],
+        consistencyMode: input.consistencyMode,
       }),
     );
   });

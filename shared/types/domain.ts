@@ -1,5 +1,15 @@
 export type ReviewScenario = "tender_compliance" | "bid_consistency";
 
+export type ReviewConsistencyMode = "balanced" | "strict";
+
+export type ReviewConsistencyResult = "first-run" | "consistent" | "drifted";
+
+export interface ReviewConsistencyDiffSummary {
+  added: number;
+  removed: number;
+  changedRisk: number;
+}
+
 export type ProjectReviewType = "\u62db\u6807\u5ba1\u67e5" | "\u6295\u6807\u5ba1\u67e5";
 
 export type ProjectStatus = "\u5f85\u5f00\u59cb" | "\u8fdb\u884c\u4e2d" | "\u5df2\u5b8c\u6210" | "\u672a\u5b8c\u6210";
@@ -82,6 +92,7 @@ export interface DocumentRecord {
   textPreview: string;
   extractedText: string;
   chunks: DocumentChunk[];
+  contentHash?: string;
   uploadedAt: string;
 }
 
@@ -89,6 +100,11 @@ export interface ReviewTask {
   id: string;
   projectId: string;
   scenario: ReviewScenario;
+  consistencyMode?: ReviewConsistencyMode;
+  consistencyFingerprint?: string;
+  consistencyRunHash?: string;
+  consistencyResult?: ReviewConsistencyResult;
+  consistencyDiffSummary?: ReviewConsistencyDiffSummary;
   name: string;
   status: ReviewTaskStatus;
   stage: ReviewTaskStage;

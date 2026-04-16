@@ -144,4 +144,55 @@ describe("parseStructuredJsonContent", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(retryEvents).toEqual([{ rateLimited: true, statusCode: 429 }]);
   });
+
+  it("uses deterministic key selection in strict consistency mode", async () => {
+    process.env.OPENAI_API_KEYS = "k1,k2,k3";
+    delete process.env.OPENAI_API_KEY;
+    process.env.OPENAI_BASE_URL = "https://example.test/v1";
+    process.env.OPENAI_MODEL = "test-model";
+
+    const fetchMock = vi.fn(async (_url, init) =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  findings: [],
+                }),
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestStructuredAiReview<{ findings: unknown[] }>({
+      systemPrompt: "system",
+      userPrompt: "user",
+      consistencyMode: "strict",
+      consistencyFingerprint: "fingerprint-1",
+      reviewUnitId: "chapter:intro:1-3:3",
+    });
+    await requestStructuredAiReview<{ findings: unknown[] }>({
+      systemPrompt: "system",
+      userPrompt: "user",
+      consistencyMode: "strict",
+      consistencyFingerprint: "fingerprint-1",
+      reviewUnitId: "chapter:intro:1-3:3",
+    });
+
+    const authorizationHeaders = fetchMock.mock.calls.map(
+      ([, init]) => (init as RequestInit).headers as Record<string, string>,
+    );
+
+    expect(authorizationHeaders).toHaveLength(2);
+    expect(authorizationHeaders[0].Authorization).toBe(authorizationHeaders[1].Authorization);
+  });
 });

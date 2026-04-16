@@ -6,8 +6,9 @@ import {
   createReviewChapterConcurrencyController,
   runWithAdaptiveChapterConcurrency,
 } from "./review-chapter-concurrency-service";
+import { createTenderChapterPromptEstimator } from "./tender-chapter-estimator-service";
 import { createId, nowIso } from "../utils";
-import { DocumentChunk, DocumentRecord, Finding, Regulation, TenderFindingCategory } from "../types";
+import { DocumentChunk, DocumentRecord, Finding, Regulation, ReviewConsistencyMode, TenderFindingCategory } from "../types";
 
 interface TenderChapter {
   id: string;
@@ -84,6 +85,7 @@ const chapterReviewSystemPrompt = [
   "Detect compliance risks based only on the input chapter and regulation candidates.",
   "Use chapter chunks as the only source text context.",
   "If evidence is insufficient, return an empty findings array.",
+  "All natural language fields in the JSON output must be Simplified Chinese (e.g. title, summary, description, recommendation, references). Do not output English unless it is copied verbatim from the input text.",
   "Return valid JSON only.",
 ].join("\n");
 
@@ -205,7 +207,7 @@ const createTenderChapterFromChunks = (params: {
   pageRange: buildPageRangeFromChunks(params.document, params.chunks),
 });
 
-const estimatePromptTokensProxy = (value: string) => value.replace(/\s+/g, "").length;
+const countNonWhitespace = (value: string) => value.replace(/\s+/g, "").length;
 
 const mergeAdjacentChapterDrafts = (
   left: TenderChapterDraft,
@@ -310,31 +312,6 @@ const buildChapterMetadataSummary = (document: DocumentRecord) => ({
   })),
 });
 
-export const estimateChapterPromptTokensProxy = (params: {
-  chapter: TenderChapter;
-  document: DocumentRecord;
-  regulations: Regulation[];
-}) => {
-  const regulationCandidates = buildRegulationCandidatesForChapter(params.chapter, params.regulations);
-  const userPrompt = JSON.stringify(
-    {
-      metadata: buildChapterMetadataSummary(params.document),
-      chapter: {
-        id: params.chapter.id,
-        title: params.chapter.title,
-        pageRange: params.chapter.pageRange,
-        chunks: params.chapter.chunks,
-      },
-      regulationCandidates,
-      outputContract: chapterReviewOutputContract,
-    },
-    null,
-    2,
-  );
-
-  return estimatePromptTokensProxy(`${chapterReviewSystemPrompt}\n${userPrompt}`);
-};
-
 const mergeTwoTenderChapters = (
   document: DocumentRecord,
   left: TenderChapter,
@@ -345,6 +322,12 @@ const mergeTwoTenderChapters = (
     title: resolveMergedChapterTitle(left.title, right.title),
     chunks: [...left.chunks, ...right.chunks],
   });
+
+const buildChapterReviewUnitId = (chapter: TenderChapter) => {
+  const firstOrder = chapter.chunks[0]?.order ?? 0;
+  const lastOrder = chapter.chunks[chapter.chunks.length - 1]?.order ?? 0;
+  return `chapter:${chapter.title}:${firstOrder}-${lastOrder}:${chapter.chunks.length}`;
+};
 
 const splitTenderChapterByBudget = (params: {
   chapter: TenderChapter;
@@ -457,12 +440,7 @@ export const rebalanceChaptersByTokenBudget = (params: {
 
   const estimateTokens =
     params.estimateTokens ??
-    ((chapter: TenderChapter) =>
-      estimateChapterPromptTokensProxy({
-        chapter,
-        document: params.document,
-        regulations: params.regulations,
-      }));
+    ((chapter: TenderChapter) => chapter.chunks.reduce((sum, chunk) => sum + countNonWhitespace(chunk.text), 0));
 
   const chapters = params.chapters.map((chapter) =>
     createTenderChapterFromChunks({
@@ -613,6 +591,8 @@ const reviewTenderChapter = async (
   taskId: string,
   seed?: number,
   signal?: AbortSignal,
+  consistencyMode?: ReviewConsistencyMode,
+  consistencyFingerprint?: string,
 ) => {
   let hadRateLimitRetry = false;
   const regulationCandidates = buildRegulationCandidatesForChapter(chapter, regulations);
@@ -638,6 +618,9 @@ const reviewTenderChapter = async (
       seed,
       signal,
       taskId,
+      consistencyMode,
+      consistencyFingerprint,
+      reviewUnitId: buildChapterReviewUnitId(chapter),
       onRetry: (event: AiRetryEvent) => {
         if (event.rateLimited) {
           hadRateLimitRetry = true;
@@ -668,6 +651,8 @@ const runCrossSectionScan = async (
   taskId: string,
   seed?: number,
   signal?: AbortSignal,
+  consistencyMode?: ReviewConsistencyMode,
+  consistencyFingerprint?: string,
 ) => {
   const pairs = buildCrossSectionPairs(chapters).map((pair) => ({
     chapterA: { title: pair.a.title, text: pair.a.text, chunkIds: pair.a.chunks.map((chunk) => chunk.id) },
@@ -680,6 +665,7 @@ const runCrossSectionScan = async (
         "You are a cross-section consistency review assistant for tender documents.",
         "Find contradictions and execution risks between chapter pairs.",
         "If evidence is insufficient, return empty conflicts.",
+        "All natural language fields in the JSON output must be Simplified Chinese (e.g. title, summary, description, recommendation, references). Do not output English unless it is copied verbatim from the input text.",
         "Return valid JSON only.",
       ].join("\n"),
       userPrompt: JSON.stringify(
@@ -710,6 +696,9 @@ const runCrossSectionScan = async (
       seed,
       signal,
       taskId,
+      consistencyMode,
+      consistencyFingerprint,
+      reviewUnitId: `cross:${pairs.map((pair) => `${pair.chapterA.title}|${pair.chapterB.title}`).join("::")}`,
     }),
   );
 };
@@ -729,6 +718,8 @@ export const generateTenderChapterAiFindings = async (params: {
   };
   seed?: number;
   signal?: AbortSignal;
+  consistencyMode?: ReviewConsistencyMode;
+  consistencyFingerprint?: string;
   onProgress?: (payload: {
     current: number;
     total: number;
@@ -739,10 +730,19 @@ export const generateTenderChapterAiFindings = async (params: {
   const extractedChapters = extractTenderChapters(params.tenderDocument);
   if (extractedChapters.length === 0) return { findings: [] };
 
+  const estimateChapterTokens = createTenderChapterPromptEstimator({
+    document: params.tenderDocument,
+    regulations: params.regulations,
+    systemPrompt: chapterReviewSystemPrompt,
+    metadata: buildChapterMetadataSummary(params.tenderDocument),
+    outputContract: chapterReviewOutputContract,
+  });
+
   const chapters = rebalanceChaptersByTokenBudget({
     chapters: extractedChapters,
     document: params.tenderDocument,
     regulations: params.regulations,
+    estimateTokens: estimateChapterTokens,
   });
 
   const chapterConcurrency = params.chapterConcurrency ?? {
@@ -762,7 +762,16 @@ export const generateTenderChapterAiFindings = async (params: {
     controller: concurrencyController,
     signal: params.signal,
     worker: ({ item, signal }) =>
-      reviewTenderChapter(item, params.tenderDocument, params.regulations, params.taskId, params.seed, signal),
+      reviewTenderChapter(
+        item,
+        params.tenderDocument,
+        params.regulations,
+        params.taskId,
+        params.seed,
+        signal,
+        params.consistencyMode,
+        params.consistencyFingerprint,
+      ),
     getSuccessMetrics: (result) => ({
       hadRateLimitRetry: result.hadRateLimitRetry,
     }),
@@ -816,6 +825,8 @@ export const generateTenderChapterAiFindings = async (params: {
     params.taskId,
     params.seed,
     params.signal,
+    params.consistencyMode,
+    params.consistencyFingerprint,
   ).catch(() => ({
     conflicts: [],
     summary: "",

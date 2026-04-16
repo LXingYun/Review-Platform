@@ -15,11 +15,27 @@ import { toDeterministicSeed } from "./review-seed-service";
 import { getRuntimeHealthSampler } from "./runtime-health-sampler";
 import { generateTenderChapterAiFindings } from "./tender-ai-review-service";
 import { summarizeRisk } from "../utils";
+import {
+  buildConsistencyFingerprint,
+  buildConsistencyRunHash,
+  buildScenarioPromptVersion,
+  deriveDeterministicSeed,
+} from "./review-consistency-service";
 
 interface RunningTaskExecution {
   attemptCount: number;
   controller: AbortController;
 }
+
+const yieldToEventLoop = async () =>
+  new Promise<void>((resolve) => {
+    if (typeof setImmediate === "function") {
+      setImmediate(resolve);
+      return;
+    }
+
+    setTimeout(resolve, 0);
+  });
 
 /** Executes the lifecycle of a single review task. */
 export class ReviewTaskRunner {
@@ -68,11 +84,25 @@ export class ReviewTaskRunner {
         throw new Error(reviewTaskMessages.aiConfigRequired);
       }
 
-      const projectReviewSeed = toDeterministicSeed(context.project.id);
+      const consistencyMode = context.task.consistencyMode ?? "balanced";
       const taskRegulations = getTaskRegulationsForExecution({
         task: context.task,
         availableRegulations: context.availableRegulations,
       });
+      const consistencyFingerprint =
+        context.task.consistencyFingerprint ??
+        buildConsistencyFingerprint({
+          scenario: context.task.scenario,
+          consistencyMode,
+          documents: context.taskDocuments,
+          regulations: context.task.scenario === "tender_compliance" ? taskRegulations : [],
+          model: aiConfig.model,
+          promptVersion: buildScenarioPromptVersion(context.task.scenario),
+        });
+      const projectReviewSeed =
+        consistencyMode === "strict"
+          ? deriveDeterministicSeed(consistencyFingerprint)
+          : toDeterministicSeed(context.project.id);
 
       const startedAt = Date.now();
       let findings: Finding[] = [];
@@ -87,6 +117,8 @@ export class ReviewTaskRunner {
           throw new Error(reviewTaskMessages.tenderDocumentRequired);
         }
 
+        await yieldToEventLoop();
+
         const tenderResult = await generateTenderChapterAiFindings({
           projectId: context.project.id,
           taskId,
@@ -94,11 +126,16 @@ export class ReviewTaskRunner {
           regulations: taskRegulations,
           chapterConcurrency: {
             initial: aiConfig.chapterReviewConcurrency,
-            min: aiConfig.chapterReviewMinConcurrency,
+            min:
+              consistencyMode === "strict"
+                ? aiConfig.chapterReviewConcurrency
+                : aiConfig.chapterReviewMinConcurrency,
           },
           runtimeMetricsProvider: this.runtimeHealthSampler.getResourceMetrics,
           seed: projectReviewSeed,
           signal: execution.controller.signal,
+          consistencyMode,
+          consistencyFingerprint,
           onProgress: ({ current, total, chapterTitle, stage }) => {
             this.repository.updateRunningTask(taskId, attemptCount, (currentTask) =>
               this.applyStage(currentTask, stage === "chapter_review" ? "chapter_review" : "cross_section_review", {
@@ -136,6 +173,8 @@ export class ReviewTaskRunner {
           regulations: taskRegulations,
           seed: projectReviewSeed,
           signal: execution.controller.signal,
+          consistencyMode,
+          consistencyFingerprint,
         });
       }
 
@@ -163,6 +202,7 @@ export class ReviewTaskRunner {
         attemptCount,
         riskLevel,
         findings: normalizedFindings,
+        consistencyRunHash: buildConsistencyRunHash(normalizedFindings),
       });
     } catch (error) {
       if (this.isTaskCancelled(taskId, attemptCount)) {

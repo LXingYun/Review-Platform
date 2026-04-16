@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAiRequestError,
   parseRetryAfterMs,
+  resolveRetryDelayMs,
   withAiRetry,
 } from "../../server/services/ai-retry-service";
 
@@ -57,6 +58,32 @@ describe("ai-retry-service", () => {
     ).rejects.toThrow("bad request");
 
     expect(called).toBe(1);
+  });
+
+  it("uses deterministic retry delays without jitter when requested", () => {
+    expect(
+      resolveRetryDelayMs({
+        error: createAiRequestError({
+          message: "timeout",
+          retryable: true,
+        }),
+        baseDelayMs: 100,
+        attempt: 1,
+        deterministic: true,
+      }),
+    ).toBe(100);
+
+    expect(
+      resolveRetryDelayMs({
+        error: createAiRequestError({
+          message: "timeout",
+          retryable: true,
+        }),
+        baseDelayMs: 100,
+        attempt: 3,
+        deterministic: true,
+      }),
+    ).toBe(400);
   });
 });
 
