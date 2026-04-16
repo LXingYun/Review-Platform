@@ -5,3 +5,4 @@ export * from "./useDocuments";
 export * from "./useReviewTasks";
 export * from "./useFindings";
 export * from "./useRegulations";
+export * from "./useAdminUsers";

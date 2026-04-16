@@ -1,3 +1,5 @@
+import { emitAuthUnauthorized, getAuthToken } from "./auth";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787/api";
 const API_REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_API_REQUEST_TIMEOUT_MS ?? 15000);
 
@@ -25,6 +27,8 @@ export class ApiRequestError extends Error {
   }
 }
 
+const shouldSkipAuthForPath = (path: string) => path.startsWith("/auth/login");
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
@@ -39,27 +43,40 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let response: Response;
   try {
+    const headers = new Headers(options.headers ?? undefined);
+    if (!(options.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    if (!shouldSkipAuthForPath(path)) {
+      const token = getAuthToken();
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+    }
+
     response = await fetch(`${API_BASE_URL}${path}`, {
-      headers: {
-        ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-        ...options.headers,
-      },
       ...options,
+      headers,
       signal: controller.signal,
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiRequestError("请求超时，请稍后重试", { isTimeout: true });
+      throw new ApiRequestError("Request timed out, please retry.", { isTimeout: true });
     }
 
-    throw new ApiRequestError("网络连接异常，请稍后重试", { isNetworkError: true });
+    throw new ApiRequestError("Network unavailable, please retry.", { isNetworkError: true });
   } finally {
     clearTimeout(timeoutHandle);
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !shouldSkipAuthForPath(path)) {
+      emitAuthUnauthorized();
+    }
+
     const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new ApiRequestError(payload?.message ?? "请求失败", { status: response.status });
+    throw new ApiRequestError(payload?.message ?? "Request failed.", { status: response.status });
   }
 
   return response.json() as Promise<T>;

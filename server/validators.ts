@@ -2,6 +2,15 @@ import { z } from "zod";
 
 const consistencyModeSchema = z.enum(["balanced", "strict"]).default("balanced");
 
+const usernameSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(32)
+  .regex(/^[a-zA-Z0-9._-]+$/);
+
+const passwordSchema = z.string().min(10).max(128);
+
 export const createProjectSchema = z.object({
   name: z.string().min(1, "项目名称不能为空"),
   type: z.enum(["招标审查", "投标审查"]),
@@ -60,4 +69,33 @@ export const createRegulationSchema = z.object({
       rules: z.coerce.number().int().nonnegative(),
     }),
   ),
+});
+
+export const loginSchema = z.object({
+  username: usernameSchema,
+  password: z.string().min(1),
+});
+
+export const changePasswordSchema = z.object({
+  oldPassword: z.string().min(1),
+  newPassword: passwordSchema,
+});
+
+export const adminCreateUserSchema = z.object({
+  username: usernameSchema,
+  password: passwordSchema,
+  role: z.enum(["admin", "user"]),
+});
+
+export const adminUpdateUserSchema = z
+  .object({
+    role: z.enum(["admin", "user"]).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((value) => value.role !== undefined || value.isActive !== undefined, {
+    message: "At least one field is required.",
+  });
+
+export const adminResetPasswordSchema = z.object({
+  password: passwordSchema,
 });

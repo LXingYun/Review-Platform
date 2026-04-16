@@ -20,6 +20,7 @@ const documentsAll = ["documents"] as const;
 const reviewTasksAll = ["review-tasks"] as const;
 const findingsAll = ["findings"] as const;
 const regulationsAll = ["regulations"] as const;
+const adminUsersAll = ["admin-users"] as const;
 
 export const queryKeys = {
   dashboard: {
@@ -45,5 +46,9 @@ export const queryKeys = {
   regulations: {
     all: regulationsAll,
     list: (search = "") => [...regulationsAll, "list", { search: normalizeSearch(search) }] as const,
+  },
+  adminUsers: {
+    all: adminUsersAll,
+    list: () => [...adminUsersAll, "list"] as const,
   },
 } as const;

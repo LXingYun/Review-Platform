@@ -8,6 +8,7 @@ import type {
   ReviewTaskStage,
   ReviewTaskStatus,
   RiskLevel,
+  UserRole,
 } from "./domain";
 
 export interface DashboardStat {
@@ -29,6 +30,30 @@ export interface DashboardTask {
 export interface DashboardResponse {
   stats: DashboardStat[];
   recentTasks: DashboardTask[];
+}
+
+export interface AuthUserInfo {
+  id: string;
+  username: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AuthLoginResponse {
+  token: string;
+  expiresAt: string;
+  user: AuthUserInfo;
+}
+
+export interface AuthMeResponse {
+  user: AuthUserInfo;
+}
+
+export interface AdminUsersResponse {
+  users: AuthUserInfo[];
 }
 
 export type ProjectListItem = Project & {

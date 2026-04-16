@@ -1,4 +1,5 @@
 export type ReviewScenario = "tender_compliance" | "bid_consistency";
+export type UserRole = "admin" | "user";
 
 export type ReviewConsistencyMode = "balanced" | "strict";
 
@@ -74,6 +75,7 @@ export interface Project {
   type: ProjectReviewType;
   status: ProjectStatus;
   description: string;
+  ownerUserId?: string;
   createdAt: string;
 }
 

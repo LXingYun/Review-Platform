@@ -1,6 +1,15 @@
 import { store } from "../store";
 import { FindingReviewLog, FindingStatus, ReviewScenario } from "../types";
 import { createId, nowIso } from "../utils";
+import {
+  assertFindingAccess,
+  assertProjectAccess,
+  assertTaskAccess,
+  getAccessibleProjectIdSet,
+  resolveActor,
+} from "./access-control-service";
+import type { AuthActor } from "./auth-types";
+import { notFound } from "./http-error";
 
 interface FindingReadCache {
   version: number;
@@ -82,13 +91,10 @@ const mapDocumentChunkById = () => {
   return nextCache;
 };
 
-const enrichFinding = (findingId: string) => {
+const enrichFinding = (findingId: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
   const { data, documentChunkMap, regulationChunkMap } = mapDocumentChunkById();
-  const finding = data.findings.find((item) => item.id === findingId);
-
-  if (!finding) {
-    throw new Error("问题记录不存在");
-  }
+  const finding = assertFindingAccess(accessActor, findingId, data);
 
   return {
     ...finding,
@@ -105,18 +111,32 @@ const enrichFinding = (findingId: string) => {
   };
 };
 
-export const listFindings = (params?: {
-  search?: string;
-  status?: FindingStatus;
-  projectId?: string;
-  scenario?: ReviewScenario;
-  taskId?: string;
-}) => {
+export const listFindings = (
+  params?: {
+    search?: string;
+    status?: FindingStatus;
+    projectId?: string;
+    scenario?: ReviewScenario;
+    taskId?: string;
+  },
+  actor?: AuthActor,
+) => {
+  const accessActor = resolveActor(actor);
   const { data, documentChunkMap, regulationChunkMap } = mapDocumentChunkById();
   const keyword = params?.search?.trim();
 
+  if (params?.projectId) {
+    assertProjectAccess(accessActor, params.projectId, data);
+  }
+  if (params?.taskId) {
+    assertTaskAccess(accessActor, params.taskId, data);
+  }
+
+  const accessibleProjectIds = getAccessibleProjectIdSet(accessActor, data);
+
   return data.findings
     .filter((finding) => {
+      if (!accessibleProjectIds.has(finding.projectId)) return false;
       if (params?.status && finding.status !== params.status) return false;
       if (params?.projectId && finding.projectId !== params.projectId) return false;
       if (params?.scenario && finding.scenario !== params.scenario) return false;
@@ -164,7 +184,12 @@ export const updateFindingStatus = (
   status: FindingStatus,
   note?: string,
   reviewer?: string,
+  actor?: AuthActor,
 ) => {
+  const accessActor = resolveActor(actor);
+  const snapshot = store.get();
+  assertFindingAccess(accessActor, findingId, snapshot);
+
   let updated = false;
 
   store.update((current) => ({
@@ -195,13 +220,17 @@ export const updateFindingStatus = (
   }));
 
   if (!updated) {
-    throw new Error("问题记录不存在");
+    throw notFound("Finding not found.");
   }
 
-  return enrichFinding(findingId);
+  return enrichFinding(findingId, accessActor);
 };
 
-export const addFindingReviewLog = (findingId: string, note: string, reviewer: string) => {
+export const addFindingReviewLog = (findingId: string, note: string, reviewer: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
+  const snapshot = store.get();
+  assertFindingAccess(accessActor, findingId, snapshot);
+
   let updated = false;
 
   store.update((current) => ({
@@ -224,8 +253,8 @@ export const addFindingReviewLog = (findingId: string, note: string, reviewer: s
   }));
 
   if (!updated) {
-    throw new Error("问题记录不存在");
+    throw notFound("Finding not found.");
   }
 
-  return enrichFinding(findingId);
+  return enrichFinding(findingId, accessActor);
 };

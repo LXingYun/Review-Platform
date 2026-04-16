@@ -1,15 +1,25 @@
 import { store } from "../store";
+import { getAccessibleProjectIdSet, resolveActor } from "./access-control-service";
+import type { AuthActor } from "./auth-types";
+import { reviewTaskStatusText } from "./review-task-messages";
 
-export const getDashboardSummary = () => {
+export const getDashboardSummary = (actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
   const data = store.get();
-  const pendingCount = data.reviewTasks.filter((task) => task.status !== "已完成").length;
-  const completedCount = data.reviewTasks.filter((task) => task.status === "已完成").length;
+  const accessibleProjectIds = getAccessibleProjectIdSet(accessActor, data);
+
+  const visibleProjects = data.projects.filter((project) => accessibleProjectIds.has(project.id));
+  const visibleTasks = data.reviewTasks.filter((task) => accessibleProjectIds.has(task.projectId));
+  const visibleFindings = data.findings.filter((finding) => accessibleProjectIds.has(finding.projectId));
+
+  const pendingCount = visibleTasks.filter((task) => task.status !== reviewTaskStatusText.completed).length;
+  const completedCount = visibleTasks.filter((task) => task.status === reviewTaskStatusText.completed).length;
 
   return {
     stats: [
       {
         label: "审查项目总数",
-        value: String(data.projects.length),
+        value: String(visibleProjects.length),
         color: "text-primary",
       },
       {
@@ -19,7 +29,7 @@ export const getDashboardSummary = () => {
       },
       {
         label: "发现问题",
-        value: String(data.findings.length),
+        value: String(visibleFindings.length),
         color: "text-destructive",
       },
       {
@@ -28,7 +38,7 @@ export const getDashboardSummary = () => {
         color: "text-success",
       },
     ],
-    recentTasks: data.reviewTasks
+    recentTasks: visibleTasks
       .slice()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 5)

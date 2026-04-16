@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  reviewTaskSseEventSchemaByType,
-  type ReviewTaskSseEventType,
-} from "@shared/types/sse";
-import { API_BASE_URL } from "@/lib/api";
+import { reviewTaskSseEventSchemaByType, type ReviewTaskSseEventType } from "@shared/types/sse";
+import { API_BASE_URL, ApiRequestError } from "@/lib/api";
+import { emitAuthUnauthorized, getAuthToken } from "@/lib/auth";
+import { fetchSse } from "@/lib/fetch-sse";
 import type { FindingListItem } from "@/lib/api-types";
 import { queryKeys } from "./queries/queryKeys";
 
@@ -17,9 +16,9 @@ const findingBatchWindowMs = 100;
 const reconnectBaseDelayMs = 1_000;
 const reconnectMaxDelayMs = 15_000;
 
-const parseJsonPayload = (event: MessageEvent<string>) => {
+const parseJsonPayload = (rawData: string) => {
   try {
-    return JSON.parse(event.data) as unknown;
+    return JSON.parse(rawData) as unknown;
   } catch {
     return null;
   }
@@ -42,7 +41,7 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
     if (!enabled || !taskId || !streamUrl) return;
 
     let stopped = false;
-    let eventSource: EventSource | null = null;
+    let abortController: AbortController | null = null;
 
     const flushFindingBuffer = () => {
       if (!taskId) return;
@@ -71,8 +70,8 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
       queryClient.invalidateQueries({ queryKey: queryKeys.findings.list({ taskId }) });
     };
 
-    const parseEvent = <T extends ReviewTaskSseEventType>(event: MessageEvent<string>, type: T) => {
-      const rawPayload = parseJsonPayload(event);
+    const parseEvent = <T extends ReviewTaskSseEventType>(rawData: string, type: T) => {
+      const rawPayload = parseJsonPayload(rawData);
       if (!rawPayload) return null;
 
       const parsed = reviewTaskSseEventSchemaByType[type].safeParse(rawPayload);
@@ -90,12 +89,7 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
       return parsed.data;
     };
 
-    const onOpen = () => {
-      reconnectAttemptRef.current = 0;
-      setIsConnected(true);
-    };
-
-    const onError = () => {
+    const scheduleReconnect = () => {
       setIsConnected(false);
       if (stopped) return;
       if (reconnectTimerRef.current !== null) return;
@@ -113,31 +107,31 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
       }, delay);
     };
 
-    const onSnapshot = (event: MessageEvent<string>) => {
-      const parsed = parseEvent(event, "snapshot");
+    const onSnapshot = (rawData: string) => {
+      const parsed = parseEvent(rawData, "snapshot");
       if (!parsed) return;
 
       queryClient.setQueryData(queryKeys.reviewTasks.detail(taskId), parsed.payload.task);
       queryClient.setQueryData(queryKeys.findings.list({ taskId }), parsed.payload.findings);
     };
 
-    const onTaskUpdated = (event: MessageEvent<string>) => {
-      const parsed = parseEvent(event, "task-updated");
+    const onTaskUpdated = (rawData: string) => {
+      const parsed = parseEvent(rawData, "task-updated");
       if (!parsed) return;
 
       queryClient.setQueryData(queryKeys.reviewTasks.detail(taskId), parsed.payload.task);
     };
 
-    const onFindingCreated = (event: MessageEvent<string>) => {
-      const parsed = parseEvent(event, "finding-created");
+    const onFindingCreated = (rawData: string) => {
+      const parsed = parseEvent(rawData, "finding-created");
       if (!parsed) return;
 
       findingBufferRef.current.push(parsed.payload.finding);
       scheduleFindingFlush();
     };
 
-    const onStreamError = (event: MessageEvent<string>) => {
-      const parsed = parseEvent(event, "stream-error");
+    const onStreamError = (rawData: string) => {
+      const parsed = parseEvent(rawData, "stream-error");
       if (!parsed) return;
 
       if (import.meta.env.DEV) {
@@ -145,28 +139,71 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
       }
 
       flushFindingBuffer();
-      setIsConnected(false);
-      eventSource?.close();
-      eventSource = null;
       invalidateTaskAndFindings();
-      onError();
+      scheduleReconnect();
+    };
+
+    const handleStreamEvent = (event: { event: string; data: string }) => {
+      if (event.event === "snapshot") {
+        onSnapshot(event.data);
+        return;
+      }
+
+      if (event.event === "task-updated") {
+        onTaskUpdated(event.data);
+        return;
+      }
+
+      if (event.event === "finding-created") {
+        onFindingCreated(event.data);
+        return;
+      }
+
+      if (event.event === "stream-error") {
+        onStreamError(event.data);
+      }
     };
 
     const connect = () => {
-      eventSource?.close();
-      eventSource = new EventSource(streamUrl);
-      eventSource.addEventListener("open", onOpen);
-      eventSource.addEventListener("error", onError);
-      eventSource.addEventListener("snapshot", onSnapshot);
-      eventSource.addEventListener("task-updated", onTaskUpdated);
-      eventSource.addEventListener("finding-created", onFindingCreated);
-      eventSource.addEventListener("stream-error", onStreamError);
+      abortController?.abort();
+      abortController = new AbortController();
+      const token = getAuthToken();
+
+      void fetchSse({
+        url: streamUrl,
+        token,
+        signal: abortController.signal,
+        onOpen: () => {
+          reconnectAttemptRef.current = 0;
+          setIsConnected(true);
+        },
+        onEvent: handleStreamEvent,
+      })
+        .then(() => {
+          if (stopped || abortController?.signal.aborted) return;
+          flushFindingBuffer();
+          scheduleReconnect();
+        })
+        .catch((error) => {
+          if (stopped || abortController?.signal.aborted) return;
+
+          if (error instanceof ApiRequestError && error.status === 401) {
+            setIsConnected(false);
+            emitAuthUnauthorized();
+            return;
+          }
+
+          flushFindingBuffer();
+          invalidateTaskAndFindings();
+          scheduleReconnect();
+        });
     };
 
     connect();
 
     return () => {
       stopped = true;
+      abortController?.abort();
       flushFindingBuffer();
       if (findingFlushTimerRef.current !== null) {
         window.clearTimeout(findingFlushTimerRef.current);
@@ -178,14 +215,6 @@ export const useTaskEventStream = ({ taskId, enabled = true }: UseTaskEventStrea
       }
       reconnectAttemptRef.current = 0;
       setIsConnected(false);
-      eventSource?.removeEventListener("open", onOpen);
-      eventSource?.removeEventListener("error", onError);
-      eventSource?.removeEventListener("snapshot", onSnapshot);
-      eventSource?.removeEventListener("task-updated", onTaskUpdated);
-      eventSource?.removeEventListener("finding-created", onFindingCreated);
-      eventSource?.removeEventListener("stream-error", onStreamError);
-      eventSource?.close();
-      eventSource = null;
     };
   }, [enabled, queryClient, streamUrl, taskId]);
 

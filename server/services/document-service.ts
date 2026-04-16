@@ -3,7 +3,21 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { store } from "../store";
 import { DocumentRecord, DocumentRole } from "../types";
-import { createId, extensionFromName, normalizeUploadedFileName, nowIso, sanitizeFileName } from "../utils";
+import {
+  createId,
+  extensionFromName,
+  normalizeUploadedFileName,
+  nowIso,
+  sanitizeFileName,
+} from "../utils";
+import {
+  assertDocumentAccess,
+  assertProjectAccess,
+  getAccessibleProjectIdSet,
+  resolveActor,
+} from "./access-control-service";
+import type { AuthActor } from "./auth-types";
+import { badRequest } from "./http-error";
 import { isSupportedUpload, parseDocumentBuffer } from "./document-parse-service";
 
 const uploadDir = path.resolve(process.cwd(), "storage", "uploads");
@@ -24,20 +38,29 @@ const cloneChunksForDocument = (source: DocumentRecord, documentId: string) =>
     sectionTitle: chunk.sectionTitle,
   }));
 
-export const listDocuments = (projectId?: string) => {
+export const listDocuments = (projectId?: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
   const data = store.get();
 
-  return data.documents.filter((document) => {
-    if (!projectId) return true;
-    return document.projectId === projectId;
-  });
+  if (projectId) {
+    assertProjectAccess(accessActor, projectId, data);
+    return data.documents.filter((document) => document.projectId === projectId);
+  }
+
+  const accessibleProjectIds = getAccessibleProjectIdSet(accessActor, data);
+  return data.documents.filter((document) => accessibleProjectIds.has(document.projectId));
 };
 
 export const saveUploadedDocument = async (params: {
   projectId: string;
   role: DocumentRole;
   file: Express.Multer.File;
+  actor?: AuthActor;
 }) => {
+  const accessActor = resolveActor(params.actor);
+  const snapshot = store.get();
+  assertProjectAccess(accessActor, params.projectId, snapshot);
+
   ensureUploadDir();
 
   const normalizedOriginalName = normalizeUploadedFileName(params.file.originalname);
@@ -48,7 +71,7 @@ export const saveUploadedDocument = async (params: {
       mimeType: params.file.mimetype || "application/octet-stream",
     })
   ) {
-    throw new Error("仅支持 PDF、文本和图片文件上传");
+    throw badRequest("Unsupported upload file type.");
   }
 
   const documentId = createId("doc");
@@ -59,9 +82,7 @@ export const saveUploadedDocument = async (params: {
 
   fs.writeFileSync(storedPath, params.file.buffer);
 
-  const existingDocument = store.get().documents.find(
-    (document) => document.contentHash === contentHash,
-  );
+  const existingDocument = snapshot.documents.find((document) => document.contentHash === contentHash);
 
   const parsedDocument = existingDocument
     ? {
@@ -105,13 +126,10 @@ export const saveUploadedDocument = async (params: {
   return document;
 };
 
-export const deleteDocument = (documentId: string) => {
+export const deleteDocument = (documentId: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
   const current = store.get();
-  const document = current.documents.find((item) => item.id === documentId);
-
-  if (!document) {
-    throw new Error("文件不存在");
-  }
+  const document = assertDocumentAccess(accessActor, documentId, current);
 
   if (document.storagePath && fs.existsSync(document.storagePath)) {
     fs.rmSync(document.storagePath, { force: true });

@@ -2,11 +2,23 @@ import fs from "node:fs";
 import { store } from "../store";
 import { Project, ProjectStatus, ReviewTaskStatus } from "../types";
 import { createId, nowIso } from "../utils";
+import { assertProjectAccess, filterProjectsForActor, resolveActor } from "./access-control-service";
+import type { AuthActor } from "./auth-types";
+import { reviewTaskStatusText } from "./review-task-messages";
 
-const activeTaskStatuses = new Set<ReviewTaskStatus>(["待审核", "进行中"]);
-const unfinishedTaskStatuses = new Set<ReviewTaskStatus>(["失败", "未完成"]);
+const activeTaskStatuses = new Set<ReviewTaskStatus>([
+  reviewTaskStatusText.queued,
+  reviewTaskStatusText.running,
+]);
+const unfinishedTaskStatuses = new Set<ReviewTaskStatus>([
+  reviewTaskStatusText.failed,
+  reviewTaskStatusText.unfinished,
+]);
 
-const deriveProjectStatus = (projectId: string, reviewTasks: Array<{ projectId: string; status: ReviewTaskStatus }>): ProjectStatus => {
+const deriveProjectStatus = (
+  projectId: string,
+  reviewTasks: Array<{ projectId: string; status: ReviewTaskStatus }>,
+): ProjectStatus => {
   const projectTasks = reviewTasks.filter((task) => task.projectId === projectId);
 
   if (projectTasks.length === 0) {
@@ -29,15 +41,22 @@ const findLatestProjectCompletedAt = (
   reviewTasks: Array<{ projectId: string; status: ReviewTaskStatus; completedAt: string | null }>,
 ) =>
   reviewTasks
-    .filter((task) => task.projectId === projectId && task.status === "已完成" && Boolean(task.completedAt))
+    .filter(
+      (task) =>
+        task.projectId === projectId &&
+        task.status === reviewTaskStatusText.completed &&
+        Boolean(task.completedAt),
+    )
     .map((task) => task.completedAt!)
     .sort((a, b) => b.localeCompare(a))[0] ?? null;
 
-export const listProjects = (search?: string) => {
+export const listProjects = (search?: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
   const data = store.get();
   const keyword = search?.trim();
+  const projects = filterProjectsForActor(accessActor, data.projects);
 
-  return data.projects
+  return projects
     .filter((project) => {
       if (!keyword) return true;
       return project.name.includes(keyword) || project.type.includes(keyword);
@@ -58,13 +77,15 @@ export const listProjects = (search?: string) => {
     });
 };
 
-export const createProject = (input: Pick<Project, "name" | "type" | "description">) => {
+export const createProject = (input: Pick<Project, "name" | "type" | "description">, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
   const project: Project = {
     id: createId("project"),
     name: input.name,
     type: input.type,
     description: input.description,
     status: "待开始",
+    ownerUserId: accessActor.id || undefined,
     createdAt: nowIso(),
   };
 
@@ -76,13 +97,10 @@ export const createProject = (input: Pick<Project, "name" | "type" | "descriptio
   return project;
 };
 
-export const deleteProject = (projectId: string) => {
+export const deleteProject = (projectId: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
   const current = store.get();
-  const project = current.projects.find((item) => item.id === projectId);
-
-  if (!project) {
-    throw new Error("项目不存在");
-  }
+  assertProjectAccess(accessActor, projectId, current);
 
   const projectDocuments = current.documents.filter((item) => item.projectId === projectId);
 

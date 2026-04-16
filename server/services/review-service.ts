@@ -1,10 +1,20 @@
 import type { ReviewConsistencyMode, ReviewScenario, ReviewTask } from "../types";
+import { store } from "../store";
 import { createId, nowIso } from "../utils";
 import { getAiConfig } from "./ai-config-service";
+import {
+  assertProjectAccess,
+  assertTaskAccess,
+  getAccessibleProjectIdSet,
+  resolveActor,
+} from "./access-control-service";
+import type { AuthActor } from "./auth-types";
+import { notFound } from "./http-error";
 import {
   buildConsistencyFingerprint,
   buildScenarioPromptVersion,
 } from "./review-consistency-service";
+import { resolveTaskRegulationContext } from "./review-context-service";
 import { getSharedReviewTaskDispatcher } from "./review-task-dispatcher";
 import {
   buildReviewTaskName,
@@ -15,11 +25,26 @@ import {
 import { getSharedReviewTaskRepository } from "./review-task-repository";
 import { getSharedReviewTaskRunner } from "./review-task-runner";
 import { getReviewTaskStageLabel } from "./review-task-stage-service";
-import { resolveTaskRegulationContext } from "./review-context-service";
 
 const reviewTaskRepository = getSharedReviewTaskRepository();
 const reviewTaskRunner = getSharedReviewTaskRunner();
 const reviewTaskDispatcher = getSharedReviewTaskDispatcher();
+
+const validateTaskDocuments = (projectId: string, documentIds: string[]) => {
+  const uniqueDocumentIds = Array.from(new Set(documentIds));
+  const data = store.get();
+  const matchedDocuments = uniqueDocumentIds
+    .map((documentId) => data.documents.find((item) => item.id === documentId))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  if (matchedDocuments.length !== uniqueDocumentIds.length) {
+    throw notFound("Document not found.");
+  }
+
+  if (!matchedDocuments.every((document) => document.projectId === projectId)) {
+    throw notFound("Document not found.");
+  }
+};
 
 export const resolveReviewExecutionMode = (params: {
   aiEnabled: boolean;
@@ -30,9 +55,25 @@ export const initializeReviewWorkers = () => {
   reviewTaskDispatcher.schedule();
 };
 
-export const listTasks = (projectId?: string) => reviewTaskRepository.listTasks(projectId);
+export const listTasks = (projectId?: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
+  const data = store.get();
+  if (projectId) {
+    assertProjectAccess(accessActor, projectId, data);
+  }
 
-export const getTask = (taskId: string) => reviewTaskRepository.getTask(taskId);
+  const accessibleProjectIds = getAccessibleProjectIdSet(accessActor, data);
+  return reviewTaskRepository
+    .listTasks(projectId)
+    .filter((task) => accessibleProjectIds.has(task.projectId));
+};
+
+export const getTask = (taskId: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
+  const data = store.get();
+  assertTaskAccess(accessActor, taskId, data);
+  return reviewTaskRepository.getTask(taskId);
+};
 
 export const createReviewTask = async (params: {
   projectId: string;
@@ -40,7 +81,13 @@ export const createReviewTask = async (params: {
   documentIds: string[];
   regulationIds?: string[];
   consistencyMode?: ReviewConsistencyMode;
+  actor?: AuthActor;
 }) => {
+  const accessActor = resolveActor(params.actor);
+  const data = store.get();
+  assertProjectAccess(accessActor, params.projectId, data);
+  validateTaskDocuments(params.projectId, params.documentIds);
+
   const aiConfig = getAiConfig();
   if (!aiConfig.enabled) {
     throw new Error(reviewTaskMessages.aiConfigRequired);
@@ -53,7 +100,7 @@ export const createReviewTask = async (params: {
   if (!creationContext.project) {
     throw new Error(reviewTaskMessages.projectNotFound);
   }
-  if (creationContext.taskDocuments.length === 0) {
+  if (creationContext.taskDocuments.length !== params.documentIds.length) {
     throw new Error(reviewTaskMessages.noDocuments);
   }
 
@@ -108,14 +155,22 @@ export const createReviewTask = async (params: {
   };
 };
 
-export const retryReviewTask = (taskId: string) => {
+export const retryReviewTask = (taskId: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
+  const data = store.get();
+  assertTaskAccess(accessActor, taskId, data);
+
   const result = reviewTaskRepository.retryTask(taskId);
   reviewTaskDispatcher.syncRuntimeQueueState();
   reviewTaskDispatcher.schedule();
   return result;
 };
 
-export const abortReviewTask = (taskId: string) => {
+export const abortReviewTask = (taskId: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
+  const data = store.get();
+  assertTaskAccess(accessActor, taskId, data);
+
   reviewTaskRunner.abortTask(taskId);
   const result = reviewTaskRepository.abortTask(taskId);
   reviewTaskDispatcher.syncRuntimeQueueState();
@@ -123,7 +178,11 @@ export const abortReviewTask = (taskId: string) => {
   return result;
 };
 
-export const deleteReviewTask = (taskId: string) => {
+export const deleteReviewTask = (taskId: string, actor?: AuthActor) => {
+  const accessActor = resolveActor(actor);
+  const data = store.get();
+  assertTaskAccess(accessActor, taskId, data);
+
   reviewTaskRunner.abortTask(taskId);
   const result = reviewTaskRepository.deleteTask(taskId);
   reviewTaskDispatcher.syncRuntimeQueueState();

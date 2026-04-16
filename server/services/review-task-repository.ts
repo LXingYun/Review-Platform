@@ -114,7 +114,9 @@ export class ReviewTaskRepository {
     const data = store.get();
     return {
       project: data.projects.find((item) => item.id === params.projectId),
-      taskDocuments: data.documents.filter((document) => params.documentIds.includes(document.id)),
+      taskDocuments: data.documents.filter(
+        (document) => document.projectId === params.projectId && params.documentIds.includes(document.id),
+      ),
       availableRegulations: data.regulations,
     };
   }
