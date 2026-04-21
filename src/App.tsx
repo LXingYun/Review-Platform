@@ -17,6 +17,7 @@ import Regulations from "./pages/Regulations";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import AdminUsers from "./pages/AdminUsers";
+import Account from "./pages/Account";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,7 @@ const App = () => (
                 <Route path="/tasks/:taskId" element={<TaskDetail />} />
                 <Route path="/upload" element={<Upload />} />
                 <Route path="/regulations" element={<Regulations />} />
+                <Route path="/account" element={<Account />} />
                 <Route
                   path="/admin/users"
                   element={

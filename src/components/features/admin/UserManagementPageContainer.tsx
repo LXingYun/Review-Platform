@@ -5,7 +5,7 @@ import {
   useResetAdminUserPasswordMutation,
   useUpdateAdminUserMutation,
 } from "@/hooks/queries";
-import { useAuth } from "@/context/AuthProvider";
+import { useAuth } from "@/context/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

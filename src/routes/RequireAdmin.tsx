@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthProvider";
+import { useAuth } from "@/context/useAuth";
 
 export const RequireAdmin = ({ children }: { children: React.ReactNode }) => {
   const { isLoading, user } = useAuth();

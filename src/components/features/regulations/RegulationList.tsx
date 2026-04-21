@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { RegulationItem } from "@/lib/api-types";
 
 interface RegulationListProps {
+  canManage: boolean;
   regulations: RegulationItem[];
   isDeleting: boolean;
   onDeleteRegulation: (regulationId: string) => void;
@@ -31,6 +32,7 @@ const categoryColor = (category: string) => {
 };
 
 const RegulationList = ({
+  canManage,
   regulations,
   isDeleting,
   onDeleteRegulation,
@@ -60,47 +62,49 @@ const RegulationList = ({
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9 rounded-full"
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={isDeleting}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>删除法规？</AlertDialogTitle>
-                          <AlertDialogDescription>删除后该法规将不再参与后续审查候选匹配。</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>取消</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => onDeleteRegulation(regulation.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  {canManage ? (
+                    <div className="flex items-center gap-2">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 rounded-full"
+                            onClick={(e) => e.stopPropagation()}
+                            disabled={isDeleting}
                           >
-                            确认删除
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 rounded-full"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditRegulation(regulation);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </div>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>删除法规？</AlertDialogTitle>
+                            <AlertDialogDescription>删除后该法规将不再参与后续审查候选匹配。</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>取消</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => onDeleteRegulation(regulation.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              确认删除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-full"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditRegulation(regulation);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-5 pb-4">

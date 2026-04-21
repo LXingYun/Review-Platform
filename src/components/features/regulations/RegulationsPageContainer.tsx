@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/context/useAuth";
 import type { RegulationDraft, RegulationItem } from "@/lib/api-types";
 import {
   useCreateRegulationMutation,
@@ -24,6 +25,8 @@ const RegulationsPageContainer = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<RegulationDraft | null>(null);
   const [editingRegulationId, setEditingRegulationId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const canManage = user?.role === "admin";
 
   const { data: regulations = [], isLoading, isError } = useRegulationsQuery(search);
 
@@ -146,6 +149,8 @@ const RegulationsPageContainer = () => {
   };
 
   const handleCreateRegulation = () => {
+    if (!canManage) return;
+
     createRegulationMutation.mutate({
       name,
       category,
@@ -169,12 +174,12 @@ const RegulationsPageContainer = () => {
   };
 
   const handlePreviewUpload = () => {
-    if (!uploadFile) return;
+    if (!canManage || !uploadFile) return;
     uploadRegulationMutation.mutate(uploadFile);
   };
 
   const handleConfirmDraft = () => {
-    if (!normalizedDraft) return;
+    if (!canManage || !normalizedDraft) return;
     confirmDraftMutation.mutate({ draft: normalizedDraft, regulationId: editingRegulationId });
   };
 
@@ -186,6 +191,8 @@ const RegulationsPageContainer = () => {
   };
 
   const handleEditRegulation = (regulation: RegulationItem) => {
+    if (!canManage) return;
+
     setEditingRegulationId(regulation.id);
     setUploadOpen(true);
     setDraft({
@@ -207,91 +214,105 @@ const RegulationsPageContainer = () => {
       <div className="surface-paper flex flex-col gap-6 rounded-[34px] px-6 py-8 md:px-8 md:py-9 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">法规与规则管理</h1>
-          <p className="mt-1 text-muted-foreground">管理审查依赖的法规、规则和支持材料</p>
+          <p className="mt-1 text-muted-foreground">
+            {canManage ? "管理审查依赖的法规、规则和支持材料" : "浏览当前法规库内容，维护操作仅管理员可用"}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <RegulationUploadDialog
-            open={uploadOpen}
-            uploadFile={uploadFile}
-            draft={normalizedDraft}
-            previewPending={uploadRegulationMutation.isPending}
-            confirmPending={confirmDraftMutation.isPending}
-            onOpenChange={handleUploadOpenChange}
-            onUploadFileChange={(file) => {
-              setUploadFile(file);
-              setDraft(null);
-            }}
-            onPreviewUpload={handlePreviewUpload}
-            onConfirmDraft={handleConfirmDraft}
-            onNameChange={(value) => setDraft((current) => (current ? { ...current, name: value } : current))}
-            onCategoryChange={(value) => setDraft((current) => (current ? { ...current, category: value } : current))}
-            onUpdatedChange={(value) => setDraft((current) => (current ? { ...current, updated: value } : current))}
-            onTextPreviewChange={(value) => setDraft((current) => (current ? { ...current, textPreview: value } : current))}
-            onAddSection={() =>
-              normalizedDraft &&
-              updateDraftSections([
-                ...normalizedDraft.sections,
-                {
-                  title: `新章节 ${normalizedDraft.sections.length + 1}`,
-                  rules: 0,
-                },
-              ])
-            }
-            onUpdateSectionTitle={(index, value) =>
-              normalizedDraft &&
-              updateDraftSectionTitle(index, value)
-            }
-            onRemoveSection={(index) => normalizedDraft && removeDraftSection(index)}
-            onAddChunk={() =>
-              normalizedDraft &&
-              updateDraftChunks([
-                ...normalizedDraft.chunks,
-                {
-                  id: `manual-chunk-${Date.now()}`,
-                  order: normalizedDraft.chunks.length + 1,
-                  text: "",
-                  sectionId: normalizedDraft.sections[0]?.title,
-                },
-              ])
-            }
-            onMoveChunk={moveDraftChunk}
-            onRemoveChunk={(index) => {
-              if (!normalizedDraft) return;
-              const nextChunks = normalizedDraft.chunks
-                .filter((_, itemIndex) => itemIndex !== index)
-                .map((item, itemIndex) => ({ ...item, order: itemIndex + 1 }));
-              updateDraftChunks(nextChunks);
-            }}
-            onUpdateChunkText={(index, value) =>
-              normalizedDraft &&
-              updateDraftChunks(
-                normalizedDraft.chunks.map((item, itemIndex) => (itemIndex === index ? { ...item, text: value } : item)),
-              )
-            }
-            onUpdateChunkSection={(index, value) =>
-              normalizedDraft &&
-              updateDraftChunks(
-                normalizedDraft.chunks.map((item, itemIndex) => (itemIndex === index ? { ...item, sectionId: value } : item)),
-              )
-            }
-          />
+        {canManage ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <RegulationUploadDialog
+              open={uploadOpen}
+              uploadFile={uploadFile}
+              draft={normalizedDraft}
+              previewPending={uploadRegulationMutation.isPending}
+              confirmPending={confirmDraftMutation.isPending}
+              onOpenChange={handleUploadOpenChange}
+              onUploadFileChange={(file) => {
+                setUploadFile(file);
+                setDraft(null);
+              }}
+              onPreviewUpload={handlePreviewUpload}
+              onConfirmDraft={handleConfirmDraft}
+              onNameChange={(value) => setDraft((current) => (current ? { ...current, name: value } : current))}
+              onCategoryChange={(value) => setDraft((current) => (current ? { ...current, category: value } : current))}
+              onUpdatedChange={(value) => setDraft((current) => (current ? { ...current, updated: value } : current))}
+              onTextPreviewChange={(value) => setDraft((current) => (current ? { ...current, textPreview: value } : current))}
+              onAddSection={() =>
+                normalizedDraft &&
+                updateDraftSections([
+                  ...normalizedDraft.sections,
+                  {
+                    title: `新章节 ${normalizedDraft.sections.length + 1}`,
+                    rules: 0,
+                  },
+                ])
+              }
+              onUpdateSectionTitle={(index, value) =>
+                normalizedDraft &&
+                updateDraftSectionTitle(index, value)
+              }
+              onRemoveSection={(index) => normalizedDraft && removeDraftSection(index)}
+              onAddChunk={() =>
+                normalizedDraft &&
+                updateDraftChunks([
+                  ...normalizedDraft.chunks,
+                  {
+                    id: `manual-chunk-${Date.now()}`,
+                    order: normalizedDraft.chunks.length + 1,
+                    text: "",
+                    sectionId: normalizedDraft.sections[0]?.title,
+                  },
+                ])
+              }
+              onMoveChunk={moveDraftChunk}
+              onRemoveChunk={(index) => {
+                if (!normalizedDraft) return;
+                const nextChunks = normalizedDraft.chunks
+                  .filter((_, itemIndex) => itemIndex !== index)
+                  .map((item, itemIndex) => ({ ...item, order: itemIndex + 1 }));
+                updateDraftChunks(nextChunks);
+              }}
+              onUpdateChunkText={(index, value) =>
+                normalizedDraft &&
+                updateDraftChunks(
+                  normalizedDraft.chunks.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, text: value } : item,
+                  ),
+                )
+              }
+              onUpdateChunkSection={(index, value) =>
+                normalizedDraft &&
+                updateDraftChunks(
+                  normalizedDraft.chunks.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, sectionId: value } : item,
+                  ),
+                )
+              }
+            />
 
-          <CreateRegulationDialog
-            open={open}
-            name={name}
-            category={category}
-            updated={updated}
-            textPreview={textPreview}
-            isPending={createRegulationMutation.isPending}
-            onOpenChange={setOpen}
-            onNameChange={setName}
-            onCategoryChange={setCategory}
-            onUpdatedChange={setUpdated}
-            onTextPreviewChange={setTextPreview}
-            onCreate={handleCreateRegulation}
-          />
-        </div>
+            <CreateRegulationDialog
+              open={open}
+              name={name}
+              category={category}
+              updated={updated}
+              textPreview={textPreview}
+              isPending={createRegulationMutation.isPending}
+              onOpenChange={setOpen}
+              onNameChange={setName}
+              onCategoryChange={setCategory}
+              onUpdatedChange={setUpdated}
+              onTextPreviewChange={setTextPreview}
+              onCreate={handleCreateRegulation}
+            />
+          </div>
+        ) : null}
       </div>
+
+      {!canManage ? (
+        <div className="rounded-[24px] border border-border/80 bg-card/85 px-5 py-4 text-sm text-muted-foreground">
+          当前账号为只读模式。你可以浏览法规内容，如需新增、上传、编辑或删除，请联系管理员。
+        </div>
+      ) : null}
 
       <div className="relative max-w-sm">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -302,6 +323,7 @@ const RegulationsPageContainer = () => {
       {isError && <p className="text-sm text-destructive">法规数据加载失败</p>}
 
       <RegulationList
+        canManage={canManage}
         regulations={regulations}
         isDeleting={deleteRegulationMutation.isPending}
         onDeleteRegulation={(regulationId) => deleteRegulationMutation.mutate(regulationId)}

@@ -7,12 +7,13 @@ import {
   ChevronRight,
   FileSearch,
   FolderKanban,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Users,
 } from "lucide-react";
 import { appThemes, type AppTheme } from "@/lib/app-themes";
-import { useAuth } from "@/context/AuthProvider";
+import { useAuth } from "@/context/useAuth";
 
 const baseNavItems = [
   { path: "/", label: "仪表盘", helper: "查看当前审查工作", icon: LayoutDashboard },
@@ -29,6 +30,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const isHome = location.pathname === "/";
   const isProjectsPage = location.pathname === "/projects";
   const currentTheme = (theme as AppTheme) || "editorial";
+  const isAccountPage = location.pathname === "/account";
 
   const navItems = useMemo(() => {
     const items = [...baseNavItems];
@@ -142,6 +144,18 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                   <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{user.role}</p>
                 </>
               ) : null}
+              <Link
+                to="/account"
+                title="账号设置"
+                className={`flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-background/75 py-2 text-xs transition-colors ${
+                  isAccountPage
+                    ? "mt-2 border-primary/30 text-foreground"
+                    : "mt-2 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                {!collapsed ? "账号设置" : null}
+              </Link>
               <button
                 type="button"
                 onClick={() => void logout()}
@@ -177,13 +191,25 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
                 <p className="font-display text-xl text-foreground">审查中心</p>
               </div>
               {user ? (
-                <button
-                  type="button"
-                  onClick={() => void logout()}
-                  className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
-                >
-                  退出
-                </button>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/account"
+                    className={`rounded-full border px-3 py-1 text-xs ${
+                      isAccountPage
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    账号设置
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => void logout()}
+                    className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+                  >
+                    退出
+                  </button>
+                </div>
               ) : null}
             </div>
 

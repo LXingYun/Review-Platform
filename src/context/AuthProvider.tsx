@@ -1,19 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { ReactNode } from "react";
 import type { AuthLoginResponse, AuthMeResponse, AuthUserInfo } from "@/lib/api-types";
 import { apiRequest } from "@/lib/api";
 import { authUnauthorizedEvent, clearAuthToken, getAuthToken, setAuthToken } from "@/lib/auth";
-
-interface AuthContextValue {
-  user: AuthUserInfo | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (params: { username: string; password: string }) => Promise<AuthUserInfo>;
-  logout: () => Promise<void>;
-  changePassword: (params: { oldPassword: string; newPassword: string }) => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext } from "./auth-context";
+import type { AuthContextValue } from "./auth-context";
 
 const useProvideAuth = (): AuthContextValue => {
   const navigate = useNavigate();
@@ -105,15 +97,7 @@ const useProvideAuth = (): AuthContextValue => {
   );
 };
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const value = useProvideAuth();
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within AuthProvider.");
-  }
-  return context;
 };
